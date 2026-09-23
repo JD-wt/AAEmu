@@ -7,6 +7,7 @@ using AAEmu.Game.Core.Managers.UnitManagers;
 using AAEmu.Game.Core.Managers.World;
 using AAEmu.Game.Models.Game.Char;
 using AAEmu.Game.Models.Game.OpenPortal;
+using AAEmu.Game.Models.Game.NPChar;
 using AAEmu.Game.Models.Game.Skills;
 using AAEmu.Game.Models.Game.Skills.Effects;
 using AAEmu.Game.Models.Game.Units;
@@ -96,13 +97,59 @@ public class OpenPortalEffectTests
         zoneManager.GetTargetIdByZoneId(Any<uint>()).WasCalled(Times.Exactly(2));
     }
 
-    private static void InstallPortalManager(IZoneManager zoneManager)
+    [Test]
+    [Arguments(1u, 3891u, 6629u)]
+    [Arguments(17u, 22042u, 22066u)]
+    [Arguments(10u, 21448u, 21449u)]
+    public async Task Apply_UsesBothNpcTemplatesFromTheSkillEffect(uint effectId, uint entranceId, uint exitId)
     {
+        var zoneManager = Mock.Of<IZoneManager>();
+        var npcManager = Mock.Of<INpcManager>();
+        npcManager.GetTemplate(entranceId).Returns(new NpcTemplate { Id = entranceId });
+        npcManager.GetTemplate(exitId).Returns(new NpcTemplate { Id = exitId });
+        InstallPortalManager(zoneManager.Object, npcManager.Object);
+
+        Apply(new OpenPortalEffect
+        {
+            Id = effectId, Distance = 3f, EnterPortalNpcId = entranceId, ExitPortalNpcId = exitId
+        }, CreateOwner(1000f, 1000f, 100f), 1002f, 1000f, 100f);
+
+        npcManager.GetTemplate(entranceId).WasCalled(Times.Once);
+        npcManager.GetTemplate(exitId).WasCalled(Times.Once);
+        Mock.VerifyNoOtherCalls(npcManager);
+        zoneManager.GetTargetIdByZoneId(Any<uint>()).WasCalled(Times.Exactly(2));
+    }
+
+    [Test]
+    public async Task Apply_MissingPortalTemplate_StopsBeforeReagentChecks()
+    {
+        var zoneManager = Mock.Of<IZoneManager>();
+        var npcManager = Mock.Of<INpcManager>();
+        npcManager.GetTemplate(22042u).Returns(new NpcTemplate { Id = 22042 });
+        InstallPortalManager(zoneManager.Object, npcManager.Object);
+
+        Apply(new OpenPortalEffect
+        {
+            Id = 17, Distance = 3f, EnterPortalNpcId = 22042, ExitPortalNpcId = 22066
+        }, CreateOwner(1000f, 1000f, 100f), 1002f, 1000f, 100f);
+
+        npcManager.GetTemplate(22066u).WasCalled(Times.Once);
+        zoneManager.GetTargetIdByZoneId(Any<uint>()).WasCalled(Times.Never);
+    }
+
+    private static void InstallPortalManager(IZoneManager zoneManager, INpcManager npcManager = null)
+    {
+        if (npcManager == null)
+        {
+            var mockNpc = Mock.Of<INpcManager>();
+            mockNpc.GetTemplate(Any<uint>()).Returns(new NpcTemplate());
+            npcManager = mockNpc.Object;
+        }
         var portalManager = new PortalManager(
             Mock.Of<ILocalizationManager>().Object,
             Mock.Of<IWorldManager>().Object,
             zoneManager,
-            Mock.Of<INpcManager>().Object,
+            npcManager,
             Mock.Of<IObjectIdManager>().Object,
             Mock.Of<ITaskManager>().Object);
         // The reagent tables are loaded from content on startup; emptying them keeps OpenPortal from

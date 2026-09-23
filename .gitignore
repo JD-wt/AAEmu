@@ -24,3 +24,7 @@ publish/
 _test_obj/
 artifacts/
 *.bak-*
+AAEmu.WorldServer/AAEmu.World/Config.json
+AAEmu.Game/Configurations/ClientData.json
+AAEmu.Game/Config.json
+AAEmu.Login/Config.json

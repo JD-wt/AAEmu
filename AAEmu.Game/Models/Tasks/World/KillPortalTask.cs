@@ -6,6 +6,6 @@ public class KillPortalTask(Portal portal) : Task
 {
     public override void Execute()
     {
-        portal.Delete();
+        portal.Close();
     }
 }

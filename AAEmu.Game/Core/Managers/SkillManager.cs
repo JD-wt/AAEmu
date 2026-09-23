@@ -1980,7 +1980,13 @@ public class SkillManager(IAnimationManager animationManager, IPlotManager plotM
                 {
                     while (reader.Read())
                     {
-                        var template = new OpenPortalEffect { Id = reader.GetUInt32("id", 0), Distance = reader.GetFloat("distance", 0f) };
+                        var template = new OpenPortalEffect
+                        {
+                            Id = reader.GetUInt32("id", 0),
+                            Distance = reader.GetFloat("distance", 0f),
+                            EnterPortalNpcId = reader.GetUInt32("enter_portal_npc_id", 0),
+                            ExitPortalNpcId = reader.GetUInt32("exit_portal_npc_id", 0)
+                        };
                         _effects["OpenPortalEffect"][template.Id] = template;
                     }
                 }

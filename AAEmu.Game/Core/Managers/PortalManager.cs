@@ -12,6 +12,8 @@ using AAEmu.Game.Models.Game.Char;
 using AAEmu.Game.Models.Game.Items;
 using AAEmu.Game.Models.Game.Items.Actions;
 using AAEmu.Game.Models.Game.OpenPortal;
+using AAEmu.Game.Models.Game.NPChar;
+using AAEmu.Game.Models.Game.Skills.Effects;
 using AAEmu.Game.Models.Game.Skills;
 using AAEmu.Game.Models;
 using AAEmu.Game.Models.Game.Teleport;
@@ -446,11 +448,6 @@ public class PortalManager(ILocalizationManager localizationManager, IWorldManag
         return false; // Not enough items
     }
 
-    /// <summary>open_portal_effects id 1: enter_portal_npc_id — the green portal you walk into.</summary>
-    private const uint EntrancePortalNpcId = 3891;
-    /// <summary>open_portal_effects id 1: exit_portal_npc_id — the yellow portal at the destination.</summary>
-    private const uint ExitPortalNpcId = 6629;
-
     /// <summary>
     /// Create a portal Npc object and returns it
     /// </summary>
@@ -458,8 +455,9 @@ public class PortalManager(ILocalizationManager localizationManager, IWorldManag
     /// <param name="isExit"></param>
     /// <param name="portalInfo"></param>
     /// <param name="portalEffectObj"></param>
+    /// <param name="template"></param>
     /// <returns></returns>
-    private Models.Game.Units.Portal MakePortal(Unit owner, bool isExit, Portal portalInfo, SkillObjectUnk1 portalEffectObj)
+    private Models.Game.Units.Portal MakePortal(Unit owner, bool isExit, Portal portalInfo, SkillObjectUnk1 portalEffectObj, NpcTemplate template)
     {
         var portalPointDestination = new Transform(null, null, 
             portalInfo.ZoneId,
@@ -467,15 +465,12 @@ public class PortalManager(ILocalizationManager localizationManager, IWorldManag
             portalInfo.X, portalInfo.Y, portalInfo.Z,
             0f, 0f, portalInfo.ZRot);
 
-        // TODO: Add support for different types of teleport books
-        var templateId = isExit ? ExitPortalNpcId : EntrancePortalNpcId;
-        var template = npcManager.GetTemplate(templateId);
-        var portalNpc = new Models.Game.Units.Portal
+        var portalNpc = new Models.Game.Units.Portal(taskManager)
         {
             ParentWorld = owner.ParentWorld,
             ObjId = objectIdManager.GetNextId(),
             OwnerId = ((Character)owner).Id,
-            TemplateId = templateId,
+            TemplateId = template.Id,
             Template = template,
             ModelId = template.ModelId,
             Faction = owner.Faction, // INFO - FactionManager.Instance.GetFaction(template.FactionId)
@@ -511,13 +506,24 @@ public class PortalManager(ILocalizationManager localizationManager, IWorldManag
         return portalNpc;
     }
 
-    public void OpenPortal(Character owner, SkillObjectUnk1 portalEffectObj)
+    public void OpenPortal(Character owner, SkillObjectUnk1 portalEffectObj, OpenPortalEffect effect)
     {
         var portalInfo = owner.Portals.GetPortalInfo((uint)portalEffectObj.Id);
+        if (portalInfo == null) return;
+
+        // Resolve both ends before consuming reagents or spawning either portal.
+        var entranceTemplate = npcManager.GetTemplate(effect.EnterPortalNpcId);
+        var exitTemplate = npcManager.GetTemplate(effect.ExitPortalNpcId);
+        if (entranceTemplate == null || exitTemplate == null)
+        {
+            Logger.Warn("OpenPortal: effect {0} has missing NPC templates (entrance={1}, exit={2})",
+                effect.Id, effect.EnterPortalNpcId, effect.ExitPortalNpcId);
+            return;
+        }
         if (!CheckCanOpenPortal(owner, portalInfo.ZoneId)) return;
 
-        var entrance = MakePortal(owner, false, portalInfo, portalEffectObj);   // Entrance (green)
-        var exit = MakePortal(owner, true, portalInfo, portalEffectObj);    // Exit (yellow)
+        var entrance = MakePortal(owner, false, portalInfo, portalEffectObj, entranceTemplate);
+        var exit = MakePortal(owner, true, portalInfo, portalEffectObj, exitTemplate);
         // Linked the 2 portals
         entrance.LinkedPortal = exit;
         exit.LinkedPortal = entrance;
@@ -527,6 +533,7 @@ public class PortalManager(ILocalizationManager localizationManager, IWorldManag
     {
         // TODO - Cooldown between portals
         if (character.ParentWorld.GetNpc(objId) is not Models.Game.Units.Portal portal) return;
+        if (portal.IsClosing || portal.IsDead) return;
 
         //have Overburdened buff cannot UsePortal
         if (character.Buffs.CheckBuffTag((uint)BuffConstants.TagOverburdened))

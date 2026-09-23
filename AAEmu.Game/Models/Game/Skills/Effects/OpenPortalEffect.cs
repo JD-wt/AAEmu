@@ -11,6 +11,8 @@ namespace AAEmu.Game.Models.Game.Skills.Effects;
 public class OpenPortalEffect : EffectTemplate
 {
     public float Distance { get; set; }
+    public uint EnterPortalNpcId { get; set; }
+    public uint ExitPortalNpcId { get; set; }
 
     public override bool OnActionTime => false;
 
@@ -32,6 +34,6 @@ public class OpenPortalEffect : EffectTemplate
         {
             return;
         }
-        PortalManager.Instance.OpenPortal(portalOwner, portalInfo);
+        PortalManager.Instance.OpenPortal(portalOwner, portalInfo, this);
     }
 }
