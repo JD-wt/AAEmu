@@ -5,6 +5,17 @@ namespace AAEmu.Game.Models.Game.Items;
 /// </summary>
 public static class ItemEvolvingRules
 {
+    /// <summary>Pay the current grade's bar and carry the remainder into the next grade.</summary>
+    public static bool TryAdvance(byte grade, byte? nextGrade, byte topGrade, uint gradeExp,
+        ref ulong experience)
+    {
+        if (grade == topGrade || nextGrade == null || gradeExp == 0 || experience < gradeExp)
+            return false;
+
+        experience -= gradeExp;
+        return true;
+    }
+
     /// <summary>
     /// Overflow past <paramref name="room"/> is what the window prints beside the bar.
     /// It must not be billed or written onto the piece. A full ladder buys nothing.

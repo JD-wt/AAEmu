@@ -1873,6 +1873,15 @@ public class Skill
             var sourceConsumeCount = 0;
             foreach (var (_, effect) in effectsToApply)
             {
+                // Synthesis luck stones are consumed by the successful item cast even though
+                // their data disables both consume_source_item and use_skill_as_reagent.
+                if (effect.Template is SpecialEffect
+                    { SpecialEffectTypeId: SpecialType.ItemEvolvingReRoll or SpecialType.ItemEvolvingSelectReRoll })
+                {
+                    consumeSource = true;
+                    sourceConsumeCount = Math.Max(sourceConsumeCount, 1);
+                    continue;
+                }
                 if (!effect.ConsumeSourceItem || effect.ConsumeItemCount <= 0)
                     continue;
                 consumeSource = true;

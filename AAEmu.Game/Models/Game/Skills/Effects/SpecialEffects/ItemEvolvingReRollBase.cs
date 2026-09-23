@@ -1,3 +1,4 @@
+using AAEmu.Game.Core.Managers;
 using AAEmu.Game.Core.Packets.G2C;
 using AAEmu.Game.GameData;
 using AAEmu.Game.Models.Game.Char;
@@ -30,7 +31,7 @@ public abstract class ItemEvolvingReRollBase : SpecialEffectAction
     private const int SlotIndexValue = 0;
 
     /// <summary>Position of the chosen replacement, sent only by the selectable variant.</summary>
-    private const int ChosenGroupValue = 2;
+    private const int ChosenGroupValue = 1;
 
     public override void Execute(BaseUnit caster,
         SkillCaster casterObj,
@@ -56,27 +57,20 @@ public abstract class ItemEvolvingReRollBase : SpecialEffectAction
         if (targetObj is not SkillCastItemTarget itemTarget)
         {
             Logger.Warn("{0}: target {1} is not an item", effectName, targetObj);
+            skill.Cancelled = true;
             return;
         }
 
         if (owner.Inventory.GetItemById(itemTarget.Id) is not EquipItem equipItem)
         {
             Logger.Warn("{0}: item {1} not found or not equipment", effectName, itemTarget.Id);
+            skill.Cancelled = true;
             return;
         }
 
         if (equipItem.EnchantDisabled || !equipItem.UsedRndAttrGroupIds.Any())
         {
             // Nothing to swap - don't spend the material over it.
-            owner.SendErrorMessage(ErrorMessageType.ItemCannotUse);
-            skill.Cancelled = true;
-            return;
-        }
-
-        // Swapping an effect spends one of the change attempts the item earned by gaining grades.
-        // Without any left the piece has to be synthesised further before it can be re-rolled again.
-        if (equipItem.EvolveChance == 0)
-        {
             owner.SendErrorMessage(ErrorMessageType.ItemCannotUse);
             skill.Cancelled = true;
             return;
@@ -90,7 +84,29 @@ public abstract class ItemEvolvingReRollBase : SpecialEffectAction
             return;
         }
 
-        var index = ResolveIndex(equipItem, skillObject);
+        var usesStone = casterObj is SkillItem;
+        var stone = casterObj is SkillItem source
+            ? owner.Inventory.Bag.GetItemByItemId(source.ItemId)
+            : null;
+        var category = ItemEnchantGameData.Instance.GetRndAttrCategory(categoryId);
+        var allowedStones = category == null ? null : ItemManager.Instance.GetItemSet(category.ReRollItemSetId);
+        if (stone == equipItem || !TryResolvePayment(usesStone, equipItem.EvolveChance,
+                skill.Template.Id, stone, allowedStones, out var remainingChances))
+        {
+            owner.SendErrorMessage(ErrorMessageType.ItemCannotUse);
+            skill.Cancelled = true;
+            return;
+        }
+
+        var index = PlayerSelects
+            ? ResolveSelectedSlot(equipItem.RndAttrGroupIds, skillObject)
+            : ResolveIndex(equipItem, skillObject);
+        if (index < 0)
+        {
+            owner.SendErrorMessage(ErrorMessageType.ItemCannotUse);
+            skill.Cancelled = true;
+            return;
+        }
         var beforeGroupId = equipItem.RndAttrGroupIds[index];
 
         // Everything the piece wears, the line being replaced included. A swap is meant to trade the
@@ -100,18 +116,19 @@ public abstract class ItemEvolvingReRollBase : SpecialEffectAction
 
         // The replacement comes out of the same bundle as the line being replaced - that bundle owns
         // this slot, and its choices are the only ones the window offers for it.
-        var afterGroupId = ResolveChosenGroup(categoryId, skillObject, held, beforeGroupId)
-                           ?? ItemEnchantGameData.Instance.RollRndAttrGroup(categoryId, equipItem.Grade,
-                               held, beforeGroupId);
+        var afterGroupId = ResolveReplacement(PlayerSelects, skillObject,
+            groupId => IsAllowedReplacement(categoryId, groupId, held, beforeGroupId),
+            () => ItemEnchantGameData.Instance.RollRndAttrGroup(categoryId, equipItem.Grade, held, beforeGroupId));
         if (afterGroupId == 0)
         {
-            Logger.Warn("{0}: pool {1} rolled nothing at grade {2}", effectName, categoryId, equipItem.Grade);
+            Logger.Warn("{0}: pool {1} has no valid replacement at grade {2}", effectName, categoryId, equipItem.Grade);
+            owner.SendErrorMessage(ErrorMessageType.ItemCannotUse);
             skill.Cancelled = true;
             return;
         }
 
         equipItem.RndAttrGroupIds[index] = afterGroupId;
-        equipItem.EvolveChance--;
+        equipItem.EvolveChance = remainingChances;
         equipItem.IsDirty = true;
 
         // The dialog spells both lines out, so the magnitudes are looked up here the same way the
@@ -140,6 +157,23 @@ public abstract class ItemEvolvingReRollBase : SpecialEffectAction
             effectName, owner.Name, index, equipItem.Id, beforeGroupId, afterGroupId);
     }
 
+    // Item casts always pay with their selected stone, even when earned attempts remain.
+    // The skill engine consumes that source only after this effect succeeds.
+    internal static bool TryResolvePayment(bool usesStone, ushort chances, uint skillId,
+        Item stone, ItemSet allowedStones, out ushort remainingChances)
+    {
+        remainingChances = chances;
+        if (usesStone)
+            return stone is { Count: > 0, SlotType: SlotType.Inventory } &&
+                   stone.Template?.UseSkillId == skillId &&
+                   allowedStones?.Items.Values.Any(entry => entry.ItemId == stone.TemplateId) == true;
+
+        if (chances == 0)
+            return false;
+        remainingChances--;
+        return true;
+    }
+
     /// <summary>
     /// Which of the item's lines the swap replaces.
     /// </summary>
@@ -164,36 +198,43 @@ public abstract class ItemEvolvingReRollBase : SpecialEffectAction
         return Random.Shared.Next(used);
     }
 
+    internal static int ResolveSelectedSlot(uint[] groups, SkillObject skillObject)
+    {
+        if (groups == null || skillObject is not SkillObjectExtraValues extras ||
+            extras.Values.Length <= SlotIndexValue)
+            return -1;
+
+        var slot = extras.Values[SlotIndexValue];
+        return slot >= 0 && slot < groups.Length && groups[slot] != 0 ? slot : -1;
+    }
+
     /// <summary>
-    /// The replacement the player named, for the variant that offers a list to pick from. Null when
-    /// none was sent or the pick does not hold up, which leaves the swap to roll.
+    /// Selectable casts carry [slot index, replacement group id]. Invalid selections never roll
+    /// a substitute: returning zero cancels the cast before the stone or earned chance is spent.
     /// </summary>
-    /// <remarks>
-    /// Treated as a request rather than an instruction: the named group has to belong to this item's
-    /// pool and may not duplicate an attribute the piece already wears, so a hand-built cast cannot
-    /// name an effect from somewhere else.
-    /// </remarks>
-    private uint? ResolveChosenGroup(uint categoryId, SkillObject skillObject, List<short> held,
+    internal static uint ResolveReplacement(bool playerSelects, SkillObject skillObject,
+        Func<uint, bool> isAllowed, Func<uint> roll)
+    {
+        if (!playerSelects)
+            return roll();
+
+        if (skillObject is not SkillObjectExtraValues extras ||
+            extras.Values.Length <= ChosenGroupValue || extras.Values[ChosenGroupValue] <= 0)
+            return 0;
+
+        var groupId = (uint)extras.Values[ChosenGroupValue];
+        return isAllowed(groupId) ? groupId : 0;
+    }
+
+    private static bool IsAllowedReplacement(uint categoryId, uint groupId, List<short> held,
         uint bundleAnchor)
     {
-        if (!PlayerSelects || skillObject is not SkillObjectExtraValues extras ||
-            extras.Values.Length <= ChosenGroupValue)
-            return null;
-
-        var chosen = extras.Values[ChosenGroupValue];
-        if (chosen <= 0)
-            return null;
-
-        var groupId = (uint)chosen;
-        // A named replacement still has to belong to the bundle that owns the slot, or a hand-built
-        // request could pull the other bundle's effect into it.
-        if (!ItemEnchantGameData.Instance.IsGroupInSameBundle(categoryId, bundleAnchor, groupId))
-            return null;
-
-        if (!ItemEnchantGameData.Instance.IsGroupInCategory(groupId, categoryId))
-            return null;
+        // A selection must come from this slot's bundle and must not duplicate a held attribute.
+        if (!ItemEnchantGameData.Instance.IsGroupInSameBundle(categoryId, bundleAnchor, groupId) ||
+            !ItemEnchantGameData.Instance.IsGroupInCategory(groupId, categoryId))
+            return false;
 
         var attribute = ItemEnchantGameData.Instance.GetRndAttrAttributes([groupId]);
-        return attribute.Count > 0 && held.Contains(attribute[0]) ? null : groupId;
+        return attribute.Count > 0 && !held.Contains(attribute[0]);
     }
 }

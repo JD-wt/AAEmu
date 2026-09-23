@@ -172,8 +172,7 @@ public class ItemEvolving : SpecialEffectAction
         }
 
         var beforeGrade = equipItem.Grade;
-        equipItem.EvolvingExp += purchased;
-        var newAttributes = ApplyExperience(equipItem, category, categoryId);
+        var newAttributes = ApplyExperience(equipItem, categoryId, purchased);
         equipItem.IsDirty = true;
 
         // The synthesis grade is the item's own grade, so a step has to be published as one on top of
@@ -297,80 +296,30 @@ public class ItemEvolving : SpecialEffectAction
     /// while experience piles past the bar, which is what a reading over 100% means.
     /// </remarks>
     private static List<ItemRndAttrUnitModifier> ApplyExperience(EquipItem equipItem,
-        ItemRndAttrCategory category, uint categoryId)
+        uint categoryId, uint purchased)
     {
         var added = new List<ItemRndAttrUnitModifier>();
-
+        var top = ItemEnchantGameData.Instance.GetLadderTop(categoryId);
+        // Widen before adding so a large feed cannot wrap before grade costs are deducted.
+        var experience = (ulong)equipItem.EvolvingExp + purchased;
         while (true)
         {
             var next = NextGrade(equipItem.Grade);
-            if (next == null)
+            var needed = ItemEnchantGameData.Instance.GetGradeExp(categoryId, equipItem.Grade);
+            if (!ItemEvolvingRules.TryAdvance(equipItem.Grade, next, top, needed, ref experience))
                 break;
 
-            // A rung is priced by the grade it leads into, not by the one it leaves. A grade the pool
-            // never priced is a grade the pool does not offer, and that is where its ladder ends -
-            // which is how one pool stops at Celestial and the next carries on to Eternal.
-            var needed = ItemEnchantGameData.Instance.GetGradeExp(categoryId, next.Value);
-            if (needed == 0)
-            {
-                // Unless the pool's own ceiling reaches past its priced rungs, which is how the
-                // story-quest sets are built: their last step carries no price of its own and is
-                // paid for by filling the grade below it. That is the jump those pieces make from a
-                // full bar, and it is the only way an unpriced rung can be entered.
-                if (!AllowsFreeStep(category, next.Value))
-                    break;
-
-                needed = ItemEnchantGameData.Instance.GetGradeExp(categoryId, equipItem.Grade);
-                if (needed == 0)
-                    break;
-            }
-
-            if (equipItem.EvolvingExp < needed)
-                break;
-
-            equipItem.EvolvingExp -= needed;
             equipItem.Grade = next.Value;
-
+            equipItem.EvolvingExp = (uint)Math.Min(experience, uint.MaxValue);
             if (equipItem.EvolveChance < MaxChangeAttempts)
                 equipItem.EvolveChance++;
-
             added.AddRange(TopUpAttributes(equipItem, categoryId));
         }
 
-        var beyond = NextGrade(equipItem.Grade);
-        var atTop = beyond == null ||
-                    (ItemEnchantGameData.Instance.GetGradeExp(categoryId, beyond.Value) == 0 &&
-                     !AllowsFreeStep(category, beyond.Value));
-
-        if (atTop)
-        {
-            // The bar still fills at the top, it just cannot tip over. Experience past the last
-            // rung's own cost is overflow the pool has nothing to sell for, so it is dropped rather
-            // than left on the item to read past 100%.
-            var ceiling = ItemEnchantGameData.Instance.GetGradeExp(categoryId, equipItem.Grade);
-            if (ceiling > 0 && equipItem.EvolvingExp > ceiling)
-                equipItem.EvolvingExp = ceiling;
-        }
-        else
-        {
-            added.AddRange(TopUpAttributes(equipItem, categoryId));
-        }
-
+        // GetExpToMaxGrade sells only the bars below the final grade.
+        equipItem.EvolvingExp = equipItem.Grade == top ? 0 : (uint)Math.Min(experience, uint.MaxValue);
+        added.AddRange(TopUpAttributes(equipItem, categoryId));
         return added;
-    }
-
-    /// <summary>
-    /// Whether a pool may enter a grade it never priced, on the strength of its own ceiling.
-    /// </summary>
-    /// <remarks>
-    /// Most pools price every grade they offer and their ceiling sits at or below the last of them.
-    /// The story-quest sets are the other way round - the ceiling names one grade more than the
-    /// ladder prices - and that spare grade is the step those pieces take once the grade below it is
-    /// full.
-    /// </remarks>
-    private static bool AllowsFreeStep(ItemRndAttrCategory category, byte grade)
-    {
-        return category != null && category.MaxEvolvingGrade >= 0 && grade <= category.MaxEvolvingGrade;
     }
 
     /// <summary>

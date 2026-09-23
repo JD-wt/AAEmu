@@ -5,6 +5,42 @@ namespace AAEmu.UnitTests.Game.Models.Game.Items;
 public class ItemEvolvingRulesTests
 {
     [Test]
+    public async Task Advance_UsesCurrentGradeCostForReportedDagger()
+    {
+        ulong experience = 6923 + 18092;
+        await Assert.That(ItemEvolvingRules.TryAdvance(5, 6, 12, 11151, ref experience)).IsTrue();
+        await Assert.That(experience).IsEqualTo(13864ul);
+        await Assert.That(ItemEvolvingRules.TryAdvance(6, 7, 12, 14940, ref experience)).IsFalse();
+        await Assert.That(experience).IsEqualTo(13864ul);
+    }
+
+    [Test]
+    public async Task Advance_CarriesAcrossMultipleGradesAndStopsAtTop()
+    {
+        ulong experience = 11151ul + 14940 + 20000;
+        await Assert.That(ItemEvolvingRules.TryAdvance(5, 6, 7, 11151, ref experience)).IsTrue();
+        await Assert.That(ItemEvolvingRules.TryAdvance(6, 7, 7, 14940, ref experience)).IsTrue();
+        await Assert.That(experience).IsEqualTo(20000ul);
+        await Assert.That(ItemEvolvingRules.TryAdvance(7, 8, 7, 10000, ref experience)).IsFalse();
+    }
+
+    [Test]
+    public async Task Advance_ExactBarAdvancesWithNoRemainder()
+    {
+        ulong experience = 11151;
+        await Assert.That(ItemEvolvingRules.TryAdvance(5, 6, 12, 11151, ref experience)).IsTrue();
+        await Assert.That(experience).IsEqualTo(0ul);
+    }
+
+    [Test]
+    public async Task Advance_LargeFeedDoesNotWrap()
+    {
+        ulong experience = (ulong)uint.MaxValue + 100;
+        await Assert.That(ItemEvolvingRules.TryAdvance(10, 11, 12, uint.MaxValue, ref experience)).IsTrue();
+        await Assert.That(experience).IsEqualTo(100ul);
+    }
+
+    [Test]
     public async Task TryPurchase_RejectsWhenTheLadderIsFull()
     {
         await Assert.That(ItemEvolvingRules.TryPurchase(50, 0, out var purchased)).IsFalse();
