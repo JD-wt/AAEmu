@@ -91,8 +91,15 @@ public class Plot
             // Trigger item use if not cancelled
             if (!state.CancellationRequested())
                 player.ItemUse(skillItem.SkillSourceItem);
-            // Free the item from lock
-            player.SendPacket(new SCItemTaskSuccessPacket(ItemTaskType.ItemUnlock, new ItemUpdate(skillItem.SkillSourceItem), []));
+            // UpdateDetail tasks do not decode as item details on this client and corrupt
+            // durability/appearance until relog. Publish the surviving item's current details
+            // separately; a consumed source must not be sent back from the stale cast reference.
+            var remainingItem = player.Inventory.GetItemById(skillItem.SkillSourceItem.Id);
+            if (remainingItem is { Count: > 0 })
+                player.SendPacket(new SCItemDetailUpdatedPacket(remainingItem));
+
+            // Complete the unlock even when the source was consumed or the plot was cancelled.
+            player.SendPacket(new SCItemTaskSuccessPacket(ItemTaskType.ItemUnlock, [], []));
         }
     }
 }
