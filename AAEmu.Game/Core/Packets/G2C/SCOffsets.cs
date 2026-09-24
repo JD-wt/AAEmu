@@ -556,6 +556,8 @@ public static class SCOffsets
     public const ushort SCEventEmptyPacket = 0x2DF; // 10.0.2.13 SC_PACKET_EVENT_EMPTY (735)
     public const ushort SCFactionPowerScorePacket = 0x00C; // 10.0.2.13 SC_PACKET_FACTION_POWER_SCORE (12)
     public const ushort SCIncreasedFavoritePortalLimitPacket = 0x08D; // 10.0.2.13 SC_PACKET_INCREASED_FAVORITE_PORTAL_LIMIT (141)
+    public const ushort SCZonePermissionChangedPacket = 0x086; // 10.0.2.13 (body not sent yet)
+    public const ushort SCZonePermissionExpelledPacket = 0x087; // 10.0.2.13 (u8 option)
     public const ushort SCInstanceVisitCountsPacket = 0x1EC; // 10.0.2.13 SC_PACKET_INSTANCE_VISIT_COUNTS (492)
     public const ushort SCInstanceVisitCountChangePacket = 0x1EE; // 10.0.2.13 SC_PACKET_INSTANCE_VISIT_COUNT_CHANGE (494)
     public const ushort SCFavoriteCraftsPacket = 0x23A; // 10.0.2.13 SC_PACKET_FAVORITE_CRAFTS (570)
@@ -617,7 +619,9 @@ public static class SCOffsets
     public const ushort SCChangeSquadMemberRoleBcast = 0x314;
     public const ushort SCChangeSquadOpenTypeBcast = 0x317;
     public const ushort SCChargeSkillCooldownChangedPacket = 0x31D;
+    public const ushort SCChronicleInfoBuyPacket = 0x355;
     public const ushort SCChronicleInfoDeletePacket = 0x356;
+    public const ushort SCChronicleInfoListPacket = 0x357;
     public const ushort SCChronicleInfoUpdatePacket = 0x358;
     public const ushort SCCompletedArchePassPacket = 0x340;
     public const ushort SCConnectStateMemberPacket = 0x310;
@@ -772,6 +776,7 @@ public static class SCOffsets
     public const ushort SCPassportIssuedPacket = 0x2F8;
     public const ushort SCPirateMemberLimitCountPacket = 0x32A;
     public const ushort SCPlotAuctionBidResponsePacket = 0x395;
+    public const ushort SCPlotAuctionInfoPacket = 0x396;
     public const ushort SCPlotAuctionBidUpdatePacket = 0x397;
     public const ushort SCPremiumBonusListPacket = 0x2D1;
     public const ushort SCProtectSensitiveOperationResultPacket = 0x28E;
@@ -792,6 +797,7 @@ public static class SCOffsets
     public const ushort SCRaidApplicantAddPacket = 0x2FF;
     public const ushort SCRaidApplicantListPacket = 0x303;
     public const ushort SCRandomShopBaseInfoUpdatePacket = 0x36B;
+    public const ushort SCRandomShopInfoRefreshPacket = 0x36A;
     public const ushort SCRandomShopInfoResetPacket = 0x369;
     public const ushort SCReopenRandomBoxRemovePacket = 0x388;
     public const ushort SCReportBadwordUserPacket = 0x2D0;

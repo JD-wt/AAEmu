@@ -145,6 +145,7 @@ public static class Program
                 services.AddSingleton<CraftManager>();
                 services.AddSingleton<ICraftManager>(sp => sp.GetRequiredService<CraftManager>());
                 services.AddSingleton<CraftOrderManager>();
+                services.AddSingleton<ResidentManager>();
 
                 services.AddSingleton<CrimeManager>();
                 services.AddSingleton<ICrimeManager>(sp => sp.GetRequiredService<CrimeManager>());
@@ -272,6 +273,7 @@ public static class Program
                 services.AddSingleton<NameManager>();
                 services.AddSingleton<INameManager>(sp => sp.GetRequiredService<NameManager>());
 
+                services.AddSingleton<PlotAuctionManager>();
                 services.AddSingleton<PlotManager>();
                 services.AddSingleton<IPlotManager>(sp => sp.GetRequiredService<PlotManager>());
 
@@ -290,6 +292,8 @@ public static class Program
 
                 services.AddSingleton<RadarManager>();
                 services.AddSingleton<IRadarManager>(sp => sp.GetRequiredService<RadarManager>());
+
+                services.AddSingleton<RandomMerchantManager>();
 
                 services.AddSingleton<SaveManager>();
                 services.AddSingleton<ISaveManager>(sp => sp.GetRequiredService<SaveManager>());

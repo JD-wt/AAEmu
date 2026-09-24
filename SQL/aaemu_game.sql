@@ -134,6 +134,21 @@ CREATE TABLE IF NOT EXISTS `character_quest_cinema_end_effects` (
   PRIMARY KEY (`owner`, `component_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Quest cinema-end effects still owed to the character';
 
+CREATE TABLE IF NOT EXISTS `character_saga_groups` (
+  `owner` int unsigned NOT NULL COMMENT 'characters.id',
+  `saga_quest_group_id` int unsigned NOT NULL COMMENT 'saga_quest_groups.id',
+  `status` tinyint NOT NULL DEFAULT 0 COMMENT 'SagaGroupStatus: 0 active, 1 complete; row absent = locked',
+  `completed_count` smallint unsigned NOT NULL DEFAULT 0 COMMENT 'Completed member quests of the group',
+  PRIMARY KEY (`owner`,`saga_quest_group_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Saga group progression per character';
+
+CREATE TABLE IF NOT EXISTS `character_saga_reward_grants` (
+  `owner` int unsigned NOT NULL COMMENT 'characters.id',
+  `saga_quest_group_id` int unsigned NOT NULL COMMENT 'saga_quest_groups.id',
+  `grant_key` int unsigned NOT NULL COMMENT 'Content key of the grant (group milestone_id; GF-W14 milestone keys)',
+  PRIMARY KEY (`owner`,`saga_quest_group_id`,`grant_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Saga rewards granted exactly once per character';
+
 CREATE TABLE IF NOT EXISTS `character_arche_passes` (
   `owner` int unsigned NOT NULL,
   `pass_id` int unsigned NOT NULL,
@@ -334,6 +349,26 @@ CREATE TABLE IF NOT EXISTS `craft_order_fee_stats` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Recent craft-order listing fee range per craft';
 
 
+CREATE TABLE IF NOT EXISTS `plot_auctions` (
+  `id` INT UNSIGNED NOT NULL COMMENT 'plot_auction_config.id',
+  `activity_id` INT UNSIGNED NOT NULL COMMENT 'game_activities.id the auction belongs to',
+  `settled` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '1 once settlement consumed every escrow row',
+  `base_price` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Standing leading bid the floor is computed from; 0 before the first bid',
+  `updated_unix` BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Plot (housing land) auction state machine rows';
+
+
+CREATE TABLE IF NOT EXISTS `character_plot_auction_bids` (
+  `auction_id` INT UNSIGNED NOT NULL COMMENT 'plot_auction_config.id',
+  `character_id` INT UNSIGNED NOT NULL COMMENT 'Bidding character',
+  `bid_amount` BIGINT UNSIGNED NOT NULL COMMENT 'Escrowed copper held for this standing bid',
+  `bid_time_unix` BIGINT NOT NULL COMMENT 'When the standing bid was placed (tie-break)',
+  PRIMARY KEY (`auction_id`,`character_id`),
+  KEY `idx_character_plot_auction_bids_character` (`character_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Plot auction bid escrow: exactly one held amount per character per auction';
+
+
 CREATE TABLE IF NOT EXISTS `faction_relations` (
   `faction1_id` INT UNSIGNED NOT NULL,
   `faction2_id` INT UNSIGNED NOT NULL,
@@ -403,6 +438,32 @@ CREATE TABLE IF NOT EXISTS `character_merchant_purchases` (
   PRIMARY KEY (`character_id`, `item_id`),
   INDEX `idx_merchant_purchase_type` (`purchase_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Persistent per-character merchant purchase limits';
+
+
+CREATE TABLE IF NOT EXISTS `character_random_shop_windows` (
+  `character_id` INT UNSIGNED NOT NULL,
+  `pack_id` INT UNSIGNED NOT NULL COMMENT 'merchant_random_packs.id',
+  `period_start` DATETIME NOT NULL COMMENT 'UTC midnight of the day this window was rolled for',
+  `rolled_at` DATETIME NOT NULL COMMENT 'When the current offers were rolled (shopDisplayInfo.recordTime)',
+  `free_used` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Free refreshes spent this period (pack refresh_free_cnt is the max)',
+  `charge_used` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Paid refreshes spent this period (pack refresh_charge_cnt is the max)',
+  PRIMARY KEY (`character_id`, `pack_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Per-character random merchant window state';
+
+
+CREATE TABLE IF NOT EXISTS `character_random_shop_offers` (
+  `character_id` INT UNSIGNED NOT NULL,
+  `pack_id` INT UNSIGNED NOT NULL,
+  `slot` INT UNSIGNED NOT NULL COMMENT 'Display slot inside the window (wire display element order field)',
+  `group_id` INT UNSIGNED NOT NULL COMMENT 'merchant_random_groups.id',
+  `good_id` INT UNSIGNED NOT NULL COMMENT 'merchant_random_goods.id',
+  `item_id` INT UNSIGNED NOT NULL COMMENT 'Item template sold by this offer',
+  `grade` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Grade resolved at load, snapshot for the quote',
+  `cost` INT NOT NULL COMMENT 'Price snapshot taken at roll time from merchant_random_goods.cost',
+  `currency` TINYINT UNSIGNED NOT NULL COMMENT 'ShopCurrencyType of the offer',
+  `sold` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Sold exactly once per window: the claim flips 0 -> 1',
+  PRIMARY KEY (`character_id`, `pack_id`, `slot`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Per-character random merchant window offers';
 
 
 CREATE TABLE IF NOT EXISTS `characters` (
@@ -1512,3 +1573,13 @@ CREATE TABLE IF NOT EXISTS `character_collections` (
   `item_type_id` int unsigned NOT NULL,
   PRIMARY KEY (`owner`, `item_type_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Discovered collection/encyclopedia entries per character';
+
+CREATE TABLE IF NOT EXISTS `character_resident_state` (
+  `owner` int unsigned NOT NULL,
+  `zone_group_id` smallint unsigned NOT NULL,
+  `service_point` int unsigned NOT NULL DEFAULT 0,
+  `charge` bigint unsigned NOT NULL DEFAULT 0,
+  `hunting_charge` bigint unsigned NOT NULL DEFAULT 0,
+  `updated_at` datetime(6) NOT NULL,
+  PRIMARY KEY (`owner`, `zone_group_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Resident service points and charges per zone group';
