@@ -144,6 +144,7 @@ public class ZoneProtocolHandler : BaseProtocolHandler
                 WorldIntegration.NotifyZoneReadyForHousing?.Invoke(connection.ZoneId, connection.InstanceId);
                 WorldIntegration.NotifyZoneReadyForGimmicks?.Invoke(connection.ZoneId, connection.InstanceId);
                 WorldIntegration.NotifyZoneReadyForDominion?.Invoke(connection.ZoneId);
+                WorldIntegration.NotifyZoneReadyForCombatRelations?.Invoke(connection.ZoneId, connection.InstanceId);
                 WorldIntegration.NotifyZoneReadyForConflictZone?.Invoke(connection.ZoneId, connection.InstanceId);
                 // schedule-linked spawners stay held back until the period next reopens.
                 GameScheduleRelay.OnZoneLoaded(connection);
@@ -169,7 +170,7 @@ public class ZoneProtocolHandler : BaseProtocolHandler
                 break;
             default:
                 if (_combatRelay.IsCombatOpcode(opcode))
-                    _combatRelay.OnZwOpcode(opcode, body.GetBytes(), bodyLen);
+                    _combatRelay.OnZwOpcode(connection, opcode, body.GetBytes(), bodyLen);
                 else if (_zoneSimRelay.TryHandle(connection, opcode, body.GetBytes(), bodyLen))
                 {
                     // handled (areas/housing/gimmick/mole/…)

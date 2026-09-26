@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 
 using AAEmu.Commons.Utils;
 using AAEmu.Commons.Utils.Creatures;
@@ -44,6 +44,7 @@ public class DoodadManager(INonUnitObjectIdManager objectIdManager, IDoodadIdMan
 
     // Details data
     private Dictionary<uint, DoodadFuncConsumeChangerItem> _doodadFuncConsumeChangerItem;
+    private DoodadFuncSpawnSlaveAfterGetItemDescriptorCatalog _spawnSlaveAfterGetItemDescriptors;
     private Dictionary<uint, List<DoodadFunc>> _funcsByGroups;
     private Dictionary<uint, DoodadFunc> _funcsById;
     private Dictionary<string, Dictionary<uint, DoodadFuncTemplate>> _funcTemplates;
@@ -326,6 +327,10 @@ public class DoodadManager(INonUnitObjectIdManager objectIdManager, IDoodadIdMan
                 }
             }
 
+            // doodad_func_local_development_board_ui_opens - the interaction opens the client's local
+            // development board window; the board type travels with the descriptor.
+            LoadLocalDevelopmentBoardUiOpenDescs(connection, _funcTemplates);
+
             // doodad_func_expedition_ui_opens - the interaction itself opens the client UI; the server
             // refreshes the expedition snapshot used by that UI.
             using (var command = connection.CreateCommand())
@@ -445,6 +450,25 @@ public class DoodadManager(INonUnitObjectIdManager objectIdManager, IDoodadIdMan
                 }
             }
 
+
+            // doodad_func_resident_townhall_ui_opens - id-only rows. The interaction opens the
+            // public townhall window; the function sends the current persisted state for its zone.
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "SELECT id FROM doodad_func_resident_townhall_ui_opens";
+                command.Prepare();
+                using (var reader = new SQLiteWrapperReader(command.ExecuteReader()))
+                {
+                    while (reader.Read())
+                    {
+                        var func = new DoodadFuncResidentTownhallUiOpen
+                        {
+                            Id = reader.GetUInt32("id")
+                        };
+                        _funcTemplates[nameof(DoodadFuncResidentTownhallUiOpen)].Add(func.Id, func);
+                    }
+                }
+            }
 
             // doodad_func_buy_fish_items
             using (var command = connection.CreateCommand())
@@ -2250,6 +2274,12 @@ public class DoodadManager(INonUnitObjectIdManager objectIdManager, IDoodadIdMan
                 }
             }
 
+            // Q09 descriptor-only catalog. Runtime grant/spawn behavior is intentionally not wired here.
+            _spawnSlaveAfterGetItemDescriptors =
+                DoodadFuncSpawnSlaveAfterGetItemDescriptorCatalog.Load(connection);
+            Logger.Info("Loaded {0} doodad_func_spawn_slave_after_get_items descriptors",
+                _spawnSlaveAfterGetItemDescriptors.Count);
+
             // doodad_func_spawn_gimmicks
             using (var command = connection.CreateCommand())
             {
@@ -2343,6 +2373,9 @@ public class DoodadManager(INonUnitObjectIdManager objectIdManager, IDoodadIdMan
                     }
                 }
             }
+
+            // doodad_func_random_store_uis - typed descriptor for the client random-shop window.
+            LoadRandomStoreUiFunctions(connection);
 
             // doodad_func_timers
             using (var command = connection.CreateCommand())
@@ -2583,6 +2616,76 @@ public class DoodadManager(INonUnitObjectIdManager objectIdManager, IDoodadIdMan
 
         CreateTemplateCaches();
         _loaded = true;
+    }
+
+    /// <summary>
+    /// Reads the local-development board descriptors: one board type per interaction function.
+    /// </summary>
+    /// <remarks>
+    /// Split out of <see cref="Load"/> so the row shape can be pinned by tests without the whole
+    /// compact database. A row that repeats an id is content corruption and fails loudly instead of
+    /// silently replacing the descriptor the client already knows.
+    /// </remarks>
+    internal static void LoadLocalDevelopmentBoardUiOpenDescs(SqliteConnection connection,
+        IDictionary<string, Dictionary<uint, DoodadFuncTemplate>> funcTemplates)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(funcTemplates);
+
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT id, local_development_board_type_id FROM doodad_func_local_development_board_ui_opens";
+        command.Prepare();
+        using var reader = new SQLiteWrapperReader(command.ExecuteReader());
+        while (reader.Read())
+        {
+            var func = new DoodadFuncLocalDevelopmentBoardUiOpen
+            {
+                Id = reader.GetUInt32("id"),
+                LocalDevelopmentBoardTypeId = reader.GetUInt32("local_development_board_type_id")
+            };
+            if (!funcTemplates[nameof(DoodadFuncLocalDevelopmentBoardUiOpen)].TryAdd(func.Id, func))
+                throw new InvalidOperationException(
+                    $"Duplicate doodad_func_local_development_board_ui_opens id {func.Id}");
+        }
+    }
+
+    /// <summary>
+    /// Loads the shipped random-shop descriptor table. The descriptor is a typed function template;
+    /// its merchant pack is resolved by <see cref="RandomMerchantGameData"/> at interaction time.
+    /// </summary>
+    internal void LoadRandomStoreUiFunctions(SqliteConnection connection)
+    {
+        if (connection == null)
+            throw new ArgumentNullException(nameof(connection));
+
+        if (!_funcTemplates.TryGetValue(nameof(DoodadFuncRandomStoreUi), out var templates))
+        {
+            templates = [];
+            _funcTemplates[nameof(DoodadFuncRandomStoreUi)] = templates;
+        }
+
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT id, merchant_random_pack_id FROM doodad_func_random_store_uis ORDER BY id";
+        command.Prepare();
+        using var reader = new SQLiteWrapperReader(command.ExecuteReader());
+        while (reader.Read())
+        {
+            var id = reader.GetUInt32("id");
+            var packId = reader.GetUInt32("merchant_random_pack_id");
+            if (id == 0 || packId == 0)
+                throw new InvalidDataException(
+                    $"DoodadFuncRandomStoreUi descriptor {id} has an invalid merchant pack {packId}");
+
+            var descriptor = new DoodadFuncRandomStoreUi
+            {
+                Id = id,
+                MerchantRandomPackId = packId
+            };
+            if (!templates.TryAdd(id, descriptor))
+                throw new InvalidDataException($"Duplicate DoodadFuncRandomStoreUi descriptor id {id}");
+        }
     }
 
     /// <summary>
@@ -3036,6 +3139,20 @@ public class DoodadManager(INonUnitObjectIdManager objectIdManager, IDoodadIdMan
         return _phaseFuncs.TryGetValue(funcGroupId, out var func) ? func : [];
     }
 
+    /// <summary>
+    /// Returns the content-only Q09 descriptor. This accessor does not grant or spawn anything.
+    /// </summary>
+    public bool TryGetSpawnSlaveAfterGetItemDescriptor(
+        uint id,
+        out DoodadFuncSpawnSlaveAfterGetItemDescriptor descriptor)
+    {
+        if (_spawnSlaveAfterGetItemDescriptors is not null)
+            return _spawnSlaveAfterGetItemDescriptors.TryGet(id, out descriptor);
+
+        descriptor = null;
+        return false;
+    }
+
     public DoodadFuncTemplate GetFuncTemplate(uint funcId, string funcType)
     {
         if (!_funcTemplates.TryGetValue(funcType, out var funcs))
@@ -3109,6 +3226,33 @@ public class DoodadManager(INonUnitObjectIdManager objectIdManager, IDoodadIdMan
                 foreach (var func in GetFuncsForGroup(group.Id))
                 {
                     if (func.FuncType != nameof(DoodadFuncCraftOrderBoardUiOpen))
+                        continue;
+                    dest.Add(template.Id);
+                    goto NextTemplate;
+                }
+            }
+
+            NextTemplate: ;
+        }
+    }
+
+    /// <summary>
+    /// Templates whose F-key opens a local development board. They are not <c>client_doodad</c> and
+    /// have no quest func, so LevelPack must list them or the cell <c>doodad.g</c> stands stay
+    /// unplanted and the client never receives the descriptor that opens the board.
+    /// </summary>
+    public void AddLocalDevelopmentBoardTemplateIds(ISet<uint> dest)
+    {
+        if (dest == null || _templates == null)
+            return;
+
+        foreach (var template in _templates.Values)
+        {
+            foreach (var group in template.FuncGroups)
+            {
+                foreach (var func in GetFuncsForGroup(group.Id))
+                {
+                    if (func.FuncType != nameof(DoodadFuncLocalDevelopmentBoardUiOpen))
                         continue;
                     dest.Add(template.Id);
                     goto NextTemplate;
@@ -3400,30 +3544,74 @@ public class DoodadManager(INonUnitObjectIdManager objectIdManager, IDoodadIdMan
 
     public static bool ChangeDoodadData(Character player, Doodad doodad, int data)
     {
-        // TODO: Can non-coffer doodads that use this packet only be changed by their owner ?
-        if (doodad.OwnerId != player.Id)
-        {
+        if (player == null || doodad == null || !CanChangeDoodadData(player, doodad))
             return false;
-        }
 
         if (doodad is DoodadCoffer)
         {
-            switch (data)
-            {
-                case (int)HousingPermission.Family when player.Family <= 0:
-                    player.SendErrorMessage(ErrorMessageType.FamilyNotExist); // Not sure
-                    return false;
-                case (int)HousingPermission.Guild when player.Expedition is not { Id: > 0 }:
-                    player.SendErrorMessage(ErrorMessageType.OnlyExpeditionMember); // Not sure
-                    return false;
-            }
+            if (data < 0 || data > (int)HousingPermission.Family)
+                return false;
+
+            var requestedPermission = (HousingPermission)data;
+            if (!HousingPermissionRules.IsDefined(requestedPermission) ||
+                !HousingPermissionRules.CanSelect(player, requestedPermission))
+                return false;
+
+            // The active DoodadFuncCofferPerm row owns who may change the data. The content
+            // currently supplies only Public and Owner rows; all other enum values fail closed.
+            var permissionFunction = doodad.CurrentFuncs?
+                .FirstOrDefault(func => func.FuncType == nameof(DoodadFuncCofferPerm));
+            if (permissionFunction == null ||
+                DoodadManager.Instance.GetFuncTemplate(permissionFunction.FuncId, permissionFunction.FuncType)
+                    is not DoodadFuncCofferPerm ||
+                !CanUseCofferPermission(player, doodad, (DoodadFuncPermission)permissionFunction.PermId))
+                return false;
+        }
+        else if (doodad.OwnerId != player.Id)
+        {
+            // Non-coffer doodads retain the existing owner-only data mutation rule.
+            return false;
         }
 
-        doodad.Data = data;
+        // Data persistence must succeed before any client sees the new value. TrySetData restores
+        // the previous in-memory value on failure, so the broadcast cannot advertise a rolled-back state.
+        if (!doodad.TrySetData(data))
+            return false;
 
         doodad.BroadcastPacket(new SCDoodadChangedPacket(doodad.ObjId, doodad.Data), false);
+        return true;
+    }
+
+    private static bool CanChangeDoodadData(Character player, Doodad doodad)
+    {
+        if (!doodad.IsVisible || doodad.ObjId == 0 || player.ParentWorld == null ||
+            doodad.ParentWorld == null || player.ParentWorld != doodad.ParentWorld)
+            return false;
+
+        if (!WorldManager.GetAround<Doodad>(player).Any(candidate => ReferenceEquals(candidate, doodad)))
+            return false;
+
+        if (!doodad.AllowedToInteract(player))
+            return false;
 
         return true;
+    }
+
+    /// <summary>
+    /// Resolves the two permission values proven by the shipped coffer-permission rows. The broader
+    /// DoodadFuncPermission enum is not silently reinterpreted for this housing path.
+    /// </summary>
+    internal static bool CanUseCofferPermission(Character player, Doodad doodad, DoodadFuncPermission permission)
+    {
+        if (player == null || doodad == null || doodad.OwnerId == 0)
+            return false;
+
+        return permission switch
+        {
+            DoodadFuncPermission.Public => true,
+            DoodadFuncPermission.Owner => doodad.OwnerId == player.Id,
+            _ => false
+        };
     }
 
     public List<uint> GetDoodadFuncConsumeChangerItemList(uint doodadFuncConsumeChangerId)

@@ -357,7 +357,7 @@ public class MateManager(WorldInstance parentWorldInstance)
         if (mateInfo == null)
             return; // skip if invalid tlId
 
-        foreach (var ati in mateInfo.Passengers)
+        foreach (var ati in mateInfo.Passengers.ToList())
         {
             UnMountMate(WorldManager.Instance.GetCharacterByObjId(ati.Value._objId), mateInfo.TlId, ati.Key, AttachUnitReason.SlaveBinding);
         }
@@ -390,15 +390,15 @@ public class MateManager(WorldInstance parentWorldInstance)
     public void RemoveAndDespawnAllActiveOwnedMates(Character character)
     {
         if (character == null) return;
-        var markForDeleteObj = new List<uint>();
         foreach (var mate in GetActiveMates(character.Id))
         {
-            foreach (var ati in mate.Passengers)
+            foreach (var ati in mate.Passengers.ToList())
                 UnMountMate(WorldManager.Instance.GetCharacterByObjId(ati.Value._objId), mate.TlId, ati.Key,
                     AttachUnitReason.SlaveBinding);
 
             if (mate.OwnerObjId > 0)
-                markForDeleteObj.Add(mate.OwnerObjId);
+                character.Mates?.CaptureActiveMateState(mate);
+
             WithdrawMateFromZone(mate);
             mate.Delete();
             ObjectIdManager.Instance.ReleaseId(mate.ObjId);
@@ -406,8 +406,10 @@ public class MateManager(WorldInstance parentWorldInstance)
                 TlIdManager.Instance.ReleaseId(mate.TlId);
         }
 
-        foreach (var u in markForDeleteObj)
-            _activeMates.Remove(u);
+        // _activeMates is keyed by Character.Id at every read and write; Mate.OwnerObjId is the
+        // runtime object id and belongs to a different value space. Removing it here left the
+        // despawned mate reachable through GetActiveMates(character.Id) after logout.
+        _activeMates.Remove(character.Id);
     }
 
     /// <summary>

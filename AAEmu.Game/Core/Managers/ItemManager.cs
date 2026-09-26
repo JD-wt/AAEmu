@@ -181,6 +181,35 @@ public class ItemManager(ISkillManager skillManager, IItemIdManager itemIdManage
         _constItemTypes[name] = itemId;
     }
 
+    /// <summary>For tests: seeds one item template without opening compact.</summary>
+    public void SetTemplateForTest(ItemTemplate template)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        _templates ??= [];
+        _templates[template.Id] = template;
+    }
+
+    /// <summary>Loads the compact summon-item to NPC relationship for isolated catalog tests.</summary>
+    public static IReadOnlyList<SummonMateTemplate> LoadSummonMateTemplates(
+        Microsoft.Data.Sqlite.SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT item_id, npc_id FROM item_summon_mates ORDER BY id";
+        command.Prepare();
+        using var sqliteReader = command.ExecuteReader();
+        using var reader = new SQLiteWrapperReader(sqliteReader);
+        var templates = new List<SummonMateTemplate>();
+        while (reader.Read())
+        {
+            templates.Add(new SummonMateTemplate
+            {
+                Id = reader.GetUInt32("item_id"),
+                NpcId = reader.GetUInt32("npc_id")
+            });
+        }
+        return templates;
+    }
+
     /// <summary>Whether an item has an item-kind entry in <c>instrument_sounds</c>.</summary>
     public bool HasItemInstrumentSound(uint itemId)
     {
@@ -789,7 +818,7 @@ public class ItemManager(ISkillManager skillManager, IItemIdManager itemIdManage
 
             using (var command = connection.CreateCommand())
             {
-                command.CommandText = "SELECT name, item_id FROM const_item_types";
+                command.CommandText = "SELECT id, name, item_id FROM const_item_types";
                 command.Prepare();
                 using (var sqliteReader = command.ExecuteReader())
                 using (var reader = new SQLiteWrapperReader(sqliteReader))
@@ -797,8 +826,9 @@ public class ItemManager(ISkillManager skillManager, IItemIdManager itemIdManage
                     while (reader.Read())
                     {
                         var name = reader.GetString("name", string.Empty);
+                        var itemId = reader.GetUInt32("item_id", 0);
                         if (!string.IsNullOrEmpty(name))
-                            _constItemTypes[name] = reader.GetUInt32("item_id", 0);
+                            _constItemTypes[name] = itemId;
                     }
                 }
             }
@@ -1168,24 +1198,8 @@ public class ItemManager(ISkillManager skillManager, IItemIdManager itemIdManage
                 }
             }
 
-            using (var command = connection.CreateCommand())
-            {
-                command.CommandText = "SELECT * FROM item_summon_mates";
-                command.Prepare();
-                using (var sqliteReader = command.ExecuteReader())
-                using (var reader = new SQLiteWrapperReader(sqliteReader))
-                {
-                    while (reader.Read())
-                    {
-                        var template = new SummonMateTemplate
-                        {
-                            Id = reader.GetUInt32("item_id"),
-                            NpcId = reader.GetUInt32("npc_id")
-                        };
-                        _templates.Add(template.Id, template);
-                    }
-                }
-            }
+            foreach (var template in LoadSummonMateTemplates(connection))
+                _templates.Add(template.Id, template);
 
             using (var command = connection.CreateCommand())
             {

@@ -132,17 +132,41 @@ public class UnitCooldowns
         return state.EndTime > DateTime.UtcNow ? state.EndTime - DateTime.UtcNow : TimeSpan.Zero;
     }
 
-    /// <summary>Shortens a running cooldown; a negative reduction extends it.</summary>
-    public void ReduceCooldown(uint skillId, TimeSpan reduction)
+    /// <summary>
+    /// Applies an authored percent-or-flat cooldown reduction to a running cooldown. A negative
+    /// authored value extends the remaining time, bounded by the original duration.
+    /// </summary>
+    /// <remarks>
+    /// An entry that has already expired is dropped rather than reduced. Nothing prunes on a timer, so an
+    /// entry can sit past its end until something reads it, and a negative reduction applied to that dead
+    /// entry would compute a positive remaining time and re-arm a cooldown the client is already showing as
+    /// ready — the skill would then be refused. Reducing a live entry is all this is for.
+    /// </remarks>
+    public void ApplyCooldownReduction(uint skillId, int flatMilliseconds, int percent)
     {
-        if (!_cooldowns.TryGetValue(skillId, out var state))
-            return;
+        while (_cooldowns.TryGetValue(skillId, out var state))
+        {
+            var now = DateTime.UtcNow;
+            if (state.EndTime <= now)
+            {
+                // Compare-and-remove so a concurrent arm of the same skill is not discarded with the
+                // expired entry it replaced.
+                _cooldowns.TryRemove(new KeyValuePair<uint, CooldownState>(skillId, state));
+                return;
+            }
 
-        var adjusted = state.EndTime - reduction;
-        if (adjusted <= DateTime.UtcNow)
-            RemoveCooldown(skillId);
-        else
-            _cooldowns[skillId] = state with { EndTime = adjusted };
+            var originalDuration = TimeSpan.FromMilliseconds(state.Duration);
+            var remaining = state.EndTime - now;
+            var remainingAfterReduction = CooldownReductionRules.CalculateRemaining(
+                originalDuration,
+                remaining,
+                flatMilliseconds,
+                percent);
+            var updated = state with { EndTime = now + remainingAfterReduction };
+
+            if (_cooldowns.TryUpdate(skillId, updated, state))
+                return;
+        }
     }
 
     /// <summary>

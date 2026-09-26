@@ -198,6 +198,7 @@ CREATE TABLE IF NOT EXISTS `accounts` (
   `loyalty` INT(11) NOT NULL DEFAULT '0',
   `last_updated` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `last_login` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `return_qualifying_login` DATETIME NULL DEFAULT NULL,
   `last_labor_tick` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `last_credits_tick` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `last_loyalty_tick` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1005,6 +1006,16 @@ CREATE TABLE IF NOT EXISTS `portal_visited_district` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='List of visited area for the portal book';
 
 
+CREATE TABLE IF NOT EXISTS `character_favorite_portals` (
+  `owner` int unsigned NOT NULL,
+  `portal_type` tinyint unsigned NOT NULL,
+  `portal_id` int unsigned NOT NULL,
+  `sort_order` int unsigned NOT NULL,
+  PRIMARY KEY (`owner`,`portal_type`,`portal_id`) USING BTREE,
+  KEY `ix_character_favorite_portals_order` (`owner`,`sort_order`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Ordered favorite portal-book entries per character';
+
+
 CREATE TABLE IF NOT EXISTS `quests` (
   `id` int unsigned NOT NULL,
   `template_id` int unsigned NOT NULL,
@@ -1361,6 +1372,18 @@ CREATE TABLE IF NOT EXISTS `conflict_zone_runtime_states` (
   PRIMARY KEY (`zone_group_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Durable conflict-zone counters, state and transition deadline';
 
+CREATE TABLE IF NOT EXISTS `character_transfer_journals` (
+  `character_id` INT UNSIGNED NOT NULL,
+  `account_id` INT UNSIGNED NOT NULL,
+  `source_server_key` VARCHAR(64) NOT NULL,
+  `target_server_key` VARCHAR(64) NOT NULL,
+  `state` TINYINT UNSIGNED NOT NULL COMMENT '1 parked, 2 transferred, 3 rolled back, 4 re-entered',
+  `snapshot_json` TEXT NOT NULL,
+  `created_at` DATETIME(6) NOT NULL,
+  `updated_at` DATETIME(6) NOT NULL,
+  PRIMARY KEY (`character_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Cross-server transfer journal: departure parks, settle/rollback/re-entry consume, one live transfer per character';
+
 CREATE TABLE IF NOT EXISTS `dominion_locked_zones` (
   `zone_id` smallint unsigned NOT NULL COMMENT 'zone_group_id the castle system is locked for',
   `locked_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1553,6 +1576,22 @@ CREATE TABLE IF NOT EXISTS `siege_scores` (
   PRIMARY KEY (`zone_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Live siege score counters per zone group, reset each siege cycle';
 
+CREATE TABLE IF NOT EXISTS `siege_settlements` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `zone_id` smallint unsigned NOT NULL COMMENT 'zone_group_id, matches dominions/siege_zones',
+  `cycle_week_start` datetime NOT NULL COMMENT 'siege_plans.week_start of the cycle that was fought',
+  `settled_at` datetime NOT NULL,
+  `outlaw_point` int unsigned NOT NULL DEFAULT '0',
+  `defense_point` int unsigned NOT NULL DEFAULT '0',
+  `offense_point` int unsigned NOT NULL DEFAULT '0',
+  `outcome` tinyint unsigned NOT NULL COMMENT '1 defense held, 2 offense broke through, 3 outlaw broke through, 4 contested',
+  `defender_faction_id` int unsigned NOT NULL COMMENT 'siege_factions.faction_id that held the ground during the siege',
+  `winner_faction_id` int unsigned NOT NULL DEFAULT '0' COMMENT 'alliance that took the dominion; 0 when the defender held it or the siege was contested',
+  `reason` varchar(255) NOT NULL DEFAULT '',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uq_siege_settlements_zone_cycle` (`zone_id`, `cycle_week_start`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='How each zone group''s siege ended, once per siege cycle';
+
 CREATE TABLE IF NOT EXISTS `character_records` (
   `owner` int unsigned NOT NULL,
   `record_id` int unsigned NOT NULL,
@@ -1583,3 +1622,65 @@ CREATE TABLE IF NOT EXISTS `character_resident_state` (
   `updated_at` datetime(6) NOT NULL,
   PRIMARY KEY (`owner`, `zone_group_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Resident service points and charges per zone group';
+
+CREATE TABLE IF NOT EXISTS `account_content_rosters` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `account_id` int unsigned NOT NULL,
+  `save_title` varchar(255) NOT NULL DEFAULT '',
+  `created_at` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`) USING BTREE,
+  KEY `idx_account_content_rosters_account` (`account_id`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Account-scoped content roster rows (content roster save/delete)';
+
+CREATE TABLE IF NOT EXISTS `account_content_roster_members` (
+  `roster_id` bigint unsigned NOT NULL,
+  `character_id` int unsigned NOT NULL,
+  PRIMARY KEY (`roster_id`, `character_id`) USING BTREE,
+  CONSTRAINT `fk_account_content_roster_members_roster` FOREIGN KEY (`roster_id`) REFERENCES `account_content_rosters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Characters saved with a content roster';
+
+CREATE TABLE IF NOT EXISTS `account_survey_form_replies` (
+  `account_id` int unsigned NOT NULL,
+  `survey_form_id` int unsigned NOT NULL,
+  `character_id` int unsigned NOT NULL DEFAULT 0,
+  `replied_at` int unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (`account_id`, `survey_form_id`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='One survey-form reply per account; the primary key is the exactly-once guard';
+
+CREATE TABLE IF NOT EXISTS `account_return_claims` (
+  `account_id` int unsigned NOT NULL,
+  `claimed_at` datetime NOT NULL,
+  `reward_item_type` int unsigned NOT NULL,
+  PRIMARY KEY (`account_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Account-return reward claims, one per account';
+
+CREATE TABLE IF NOT EXISTS `character_reopen_boxes` (
+  `character_id` INT UNSIGNED NOT NULL,
+  `item_id` BIGINT UNSIGNED NOT NULL COMMENT 'Box item instance id from the wire (u64)',
+  `pack_id` INT UNSIGNED NOT NULL COMMENT 'merchant_reopen_packs.id the box draws from',
+  `free_used` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Free opens spent (pack free_count is the max)',
+  `charge_used` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Paid opens spent (pack charge_count is the max)',
+  `rolled_at` DATETIME NOT NULL COMMENT 'When the current reward was rolled',
+  `refresh_available_at` DATETIME NOT NULL COMMENT 'First open plus life_time minutes: the box closes then',
+  `opened_at` DATETIME NULL COMMENT 'When the first reward of this box was claimed (wire openDate)',
+  `group_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'merchant_reopen_groups.id of the current draw',
+  `good_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'merchant_reopen_goods.id of the current draw; 0 = no roll',
+  `reward_item_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Item granted by the current draw',
+  `reward_grade` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Grade of the granted item',
+  `reward_count` INT NOT NULL DEFAULT 0 COMMENT 'merchant_reopen_goods.count of the current draw',
+  `settled` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Reward claimed exactly once: the claim flips 0 -> 1',
+  PRIMARY KEY (`character_id`, `item_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Per-character reopen-box item state';
+
+CREATE TABLE IF NOT EXISTS `indun_reward_claims` (
+  `run_id` varchar(128) NOT NULL,
+  `instance_id` int unsigned NOT NULL,
+  `instance_reward_kind_id` int unsigned NOT NULL,
+  `character_id` int unsigned NOT NULL,
+  `mail_id` bigint unsigned NULL,
+  `claimed_at` datetime(6) NOT NULL,
+  PRIMARY KEY (`run_id`, `instance_id`, `character_id`, `instance_reward_kind_id`),
+  KEY `idx_indun_reward_claims_instance` (`instance_id`, `instance_reward_kind_id`),
+  KEY `idx_indun_reward_claims_character` (`character_id`, `claimed_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='W03A indun mail reward claims, one per character and logical run';
+

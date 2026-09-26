@@ -84,6 +84,8 @@ public class GameNetwork : Singleton<GameNetwork>
         RegisterPacket(CSOffsets.CSSpecialtyRatioPacket, 1, typeof(CSSpecialtyRatioPacket));
         RegisterPacket(CSOffsets.CSListSpecialtyGoodsPacket, 1, typeof(CSListSpecialtyGoodsPacket));
         RegisterPacket(CSOffsets.CSBuySpecialtyItemPacket, 1, typeof(CSBuySpecialtyItemPacket));
+        RegisterPacket(CSOffsets.CSFakeBuySpecialtyItemPacket, 1, typeof(CSFakeBuySpecialtyItemPacket));
+        RegisterPacket(CSOffsets.CSFakeSellSpecialtyItemPacket, 1, typeof(CSFakeSellSpecialtyItemPacket));
         RegisterPacket(CSOffsets.CSSpecialtyRecordLoadPacket, 1, typeof(CSSpecialtyRecordLoadPacket));
         RegisterPacket(CSOffsets.CSDepositMoneyPacket, 1, typeof(CSDepositMoneyPacket));
         RegisterPacket(CSOffsets.CSWithdrawMoneyPacket, 1, typeof(CSWithdrawMoneyPacket));
@@ -443,9 +445,11 @@ public class GameNetwork : Singleton<GameNetwork>
         RegisterPacket(CSOffsets.CSRequestCraftOrderFeePacket, 1, typeof(CSRequestCraftOrderFeePacket));
         RegisterPacket(CSOffsets.CSRequestCraftOrderItemsPacket, 1, typeof(CSRequestCraftOrderItemsPacket));
         RegisterPacket(CSOffsets.CSUpdateFavoriteCraftsPacket, 1, typeof(CSUpdateFavoriteCraftsPacket));
+        RegisterPacket(CSOffsets.CSUpdateFavoritePortalPacket, 1, typeof(CSUpdateFavoritePortalPacket));
         RegisterPacket(CSOffsets.CSRunZoneCommand, 1, typeof(CSRunZoneCommand));
         RegisterPacket(CSOffsets.CSICSBuyCountRequestPacket, 1, typeof(CSICSBuyCountRequestPacket));
         RegisterPacket(CSOffsets.CSEnsembleAcceptPacket, 1, typeof(CSEnsembleAcceptPacket));
+        RegisterPacket(CSOffsets.CSEnsembleMidiBinReadyPacket, 1, typeof(CSEnsembleMidiBinReadyPacket));
         RegisterPacket(CSOffsets.CSEnsembleRejectPacket, 1, typeof(CSEnsembleRejectPacket));
         RegisterPacket(CSOffsets.CSRankRankerAppearance, 1, typeof(CSRankRankerAppearance));
         RegisterPacket(CSOffsets.CSAntibotTransferWorldPacket, 1, typeof(CSAntibotTransferWorldPacket));
@@ -504,9 +508,11 @@ public class GameNetwork : Singleton<GameNetwork>
         RegisterPacket(CSOffsets.CSArchePassChangeMissionPacket, 1, typeof(CSArchePassChangeMissionPacket));
         RegisterPacket(CSOffsets.CSArchePassNormalCompletePacket, 1, typeof(CSArchePassNormalCompletePacket));
         RegisterPacket(CSOffsets.CSShowCurrentWorld, 1, typeof(CSShowCurrentWorld));
+        RegisterPacket(CSOffsets.CSContentRosterDeletePacket, 1, typeof(CSContentRosterDeletePacket));
         RegisterPacket(CSOffsets.CSContentRosterSavePacket, 1, typeof(CSContentRosterSavePacket));
         RegisterPacket(CSOffsets.CSRandomShopGoodsBuyPacket, 1, typeof(CSRandomShopGoodsBuyPacket));
         RegisterPacket(CSOffsets.CSRandomShopInfoPacket, 1, typeof(CSRandomShopInfoPacket));
+        RegisterPacket(CSOffsets.CSSurveyFormReplyPacket, 1, typeof(CSSurveyFormReplyPacket));
         RegisterPacket(CSOffsets.CSRandomShopInfoRefreshPacket, 1, typeof(CSRandomShopInfoRefreshPacket));
         RegisterPacket(CSOffsets.CSSelectInstanceDifficultPacket, 1, typeof(CSSelectInstanceDifficultPacket));
 

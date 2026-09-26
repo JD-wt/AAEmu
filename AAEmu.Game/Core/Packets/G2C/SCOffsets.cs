@@ -8,6 +8,7 @@ public static class SCOffsets
     public const ushort SCLeaveWorldGrantedPacket = 0x3;
     public const ushort SCLeaveWorldCanceledPacket = 0x4;
     public const ushort SCWorldQueuePacket = 0x5;
+    public const ushort SCDepartureServerGrantedPacket = 0x6; // 10.0.2.13: empty body (catalog_SC.md row 16, opcode 0x006)
     public const ushort SCInitialConfigPacket = 0x7;
     public const ushort SCTrionConfigPacket = 0x07;
     public const ushort SCExpeditionListPacket = 0xA; // 10.0.2.13
@@ -622,6 +623,10 @@ public static class SCOffsets
     public const ushort SCChronicleInfoBuyPacket = 0x355;
     public const ushort SCChronicleInfoDeletePacket = 0x356;
     public const ushort SCChronicleInfoListPacket = 0x357;
+    public const ushort SCContentRosterDeletePacket = 0x35E; // 10.0.2.13: bool result, bool isExpired, u16 ErrorMessage
+    public const ushort SCContentRosterListPacket = 0x35F; // 10.0.2.13: i32 count, then the save info record
+    public const ushort SCContentRosterSavePacket = 0x360; // 10.0.2.13: bool result, u16 ErrorMessage
+    public const ushort SCSurveyFormSavePacket = 0x364; // 10.0.2.13: u16 ErrorMessage, u32 type, bool result
     public const ushort SCChronicleInfoUpdatePacket = 0x358;
     public const ushort SCCompletedArchePassPacket = 0x340;
     public const ushort SCConnectStateMemberPacket = 0x310;
@@ -797,8 +802,13 @@ public static class SCOffsets
     public const ushort SCRaidApplicantAddPacket = 0x2FF;
     public const ushort SCRaidApplicantListPacket = 0x303;
     public const ushort SCRandomShopBaseInfoUpdatePacket = 0x36B;
+    public const ushort SCRandomShopGoodsBuyPacket = 0x367;
+    public const ushort SCRandomShopInfoPacket = 0x368;
     public const ushort SCRandomShopInfoRefreshPacket = 0x36A;
     public const ushort SCRandomShopInfoResetPacket = 0x369;
+    public const ushort SCReopenRandomBoxGetItemPacket = 0x385;
+    public const ushort SCReopenRandomBoxInfoPacket = 0x386;
+    public const ushort SCReopenRandomBoxRefreshPacket = 0x387;
     public const ushort SCReopenRandomBoxRemovePacket = 0x388;
     public const ushort SCReportBadwordUserPacket = 0x2D0;
     public const ushort SCReputationChangedPacket = 0x2A5;
@@ -860,6 +870,7 @@ public static class SCOffsets
     public const ushort SCUnlockLearnSkillPacket = 0x146;
     public const ushort SCUpdateHousingUccPacket = 0x326;
     public const ushort SCUpdatedFavoriteCraftsPacket = 0x23B;
+    public const ushort SCZoneScoreListPacket = 0x34F;
     public const ushort SCZoneScoreResetPacket = 0x351;
     public const ushort SCZoneScoreUpdatePacket = 0x350;
     public const ushort SCRankSnapshotPacket = 0x27A; // 10.0.2.13

@@ -13,6 +13,7 @@ using AAEmu.Game.Models.Game;
 using AAEmu.Game.Models.Game.Char;
 using AAEmu.Game.Models.Game.Dominions;
 using AAEmu.Game.Models.Game.DoodadObj;
+using AAEmu.Game.Models.Game.Faction;
 using AAEmu.Game.Models.Game.Gimmicks;
 using AAEmu.Game.Models.Game.Housing;
 using AAEmu.Game.Models.Game.Items;
@@ -427,6 +428,15 @@ public static class WorldIntegration
     /// </summary>
     public static Action RelayFactionRelationsToZones { get; set; }
 
+    /// <summary>
+    /// Transport-only WZ CvF/FvF relation publications. A content-backed publisher must provide
+    /// versioned full-state or delta records; this seam deliberately does not map faction tables.
+    /// The World relay accumulates and replays those records when a zone reaches ZoneLoaded.
+    /// </summary>
+    public static Action<CombatRelationPublication> RelayCvFCombatRelationsToZones { get; set; }
+    public static Action<CombatRelationPublication> RelayFvFCombatRelationsToZones { get; set; }
+    public static Action<uint, uint> NotifyZoneReadyForCombatRelations { get; set; }
+
     /// <summary>WZUnitExpeditionChanged (0x01A). Args: unit, old expedition, new expedition.</summary>
     public static Action<uint, int, int> RelayUnitExpeditionChangedToZone { get; set; }
 
@@ -542,6 +552,16 @@ public static class WorldIntegration
 
     /// <summary>Zone reported quest_area/district leave.</summary>
     public static Action<uint, uint, int, int> OnZoneLeaveArea { get; set; }
+
+    /// <summary>
+    /// ZW area membership edge including the Zone that reported it.
+    /// Args: zone id, unit id, area group (kind) id, area id, area secondary value, entering.
+    /// <para>
+    /// The group is the area KIND and the area id identifies one area within it; they are
+    /// separate quantities and neither is a distance.
+    /// </para>
+    /// </summary>
+    public static Action<uint, uint, uint, int, int, bool> OnZoneAreaEvent { get; set; }
 
     /// <summary>Zone removed a house (ZWRemoveHouse).</summary>
     public static Action<ushort> OnZoneRemoveHouse { get; set; }

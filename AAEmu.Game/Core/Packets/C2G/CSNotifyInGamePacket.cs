@@ -142,6 +142,7 @@ public class CSNotifyInGamePacket() : GamePacket(CSOffsets.CSNotifyInGamePacket,
         ItemWallet.ConvertOwnedMileage(Connection.ActiveChar);
         ItemWallet.ConvertOwnedCashPacks(Connection.ActiveChar);
         ScheduleItemManager.Instance.SendActive(Connection.ActiveChar);
+        Connection.SendPacket(ContentRosterService.Instance.ListPacket(Connection.AccountId));
 
         // Territory ownership for the world map and the territory UI (both the Hero/faction and the guild
         // castle systems), then the Hero panel state.
@@ -153,6 +154,21 @@ public class CSNotifyInGamePacket() : GamePacket(CSOffsets.CSNotifyInGamePacket,
         // is built later and does not keep that map. Listing authority is read here.
         Connection.SendPacket(new SCAccountAttributeConfigPacket());
         AccountAttributePublisher.Send(Connection);
+
+        // Account-return availability for the welcome-back reward window: content days decide the
+        // window and the claim ledger decides whether this account still has one to take. A missing
+        // content_configs row is logged loudly and skips the packet instead of blocking world entry.
+        try
+        {
+            Connection.SendPacket(new SCReturnAccountStatusPacket(
+                AccountReturnManager.Instance.IsRewardAvailable(
+                    Connection.AccountId,
+                    Connection.HasPreviousLogin ? Connection.PreviousLoginUtc : null)));
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.Error(ex, "NotifyInGame: account-return status not sent; required content_configs rows are missing");
+        }
 
         // Mirror interest armed on NotifyInGameCompleted — not here during load.
         Logger.Info($"NotifyInGame: {Connection.ActiveChar?.Name} ({Connection.ActiveChar?.Id}) zoneAuth={WorldIntegration.ZoneAuthority}");
