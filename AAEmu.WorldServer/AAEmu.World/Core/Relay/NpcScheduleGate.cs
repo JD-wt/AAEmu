@@ -164,7 +164,7 @@ public static class NpcScheduleGate
             RetireClosedSpawns(justClosed);
 
         if (justOpened.Count > 0)
-            ReArmZones(justOpened.Count);
+            ReArmZones(justOpened);
 
         ReportCoverage(next);
     }
@@ -265,17 +265,17 @@ public static class NpcScheduleGate
     }
 
     /// <summary>
-    /// Re-announces the activate sphere so the dedicate re-runs the spawners it has already armed.
-    /// Placements suppressed while their window was shut announce again and are accepted this time.
+    /// Re-arms only placements whose own window opened. A whole-zone activate would also revive
+    /// unrelated script spawners that a completed dungeon room deliberately deactivated.
     /// </summary>
-    private static void ReArmZones(int openedCount)
+    private static void ReArmZones(IReadOnlySet<uint> openedTypes)
     {
         foreach (var zone in ZoneSession.Instance.All)
         {
             if (zone.State < ZoneConnectionState.ZoneLoaded)
                 continue;
 
-            ZoneProtocolHandler.ReactivateNpcSpawners(zone, $"{openedCount} spawner windows opened");
+            ScheduleSpawnerRearm.Apply(zone, openedTypes);
         }
     }
 

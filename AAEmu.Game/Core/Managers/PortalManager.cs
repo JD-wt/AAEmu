@@ -383,6 +383,7 @@ public class PortalManager(ILocalizationManager localizationManager, IWorldManag
                 Type = id,
                 Name = localizationManager.Get("return_points", "name", id, local.EditorName),
                 ZoneId = local.ZoneKey,
+                WorldId = worldTemplate.Id,
                 X = world.X,
                 Y = world.Y,
                 Z = world.Z,

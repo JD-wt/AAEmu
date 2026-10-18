@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 
 using AAEmu.Commons.Utils;
 using AAEmu.Game.Core.Managers;
@@ -65,6 +65,9 @@ public class Skill
     public bool ReleaseActivePlotState(PlotState state) =>
         state != null && Interlocked.CompareExchange(ref _activePlotState, null, state) == state;
     public Dictionary<uint, SkillHitType> HitTypes { get; set; }
+
+    /// <summary>Dungeon lifecycle scripts signal area doodads independently of their unit effect cap.</summary>
+    public bool SignalLifecycleDoodads { get; set; }
     private readonly HashSet<uint> _markedPlotTargets = [];
 
     /// <summary>
@@ -1696,7 +1699,13 @@ public class Skill
         ApplyEffectsCore(caster, casterCaster, targetSelf, targetCaster, skillObject);
     }
 
-    private void ApplyEffectsCore(BaseUnit caster, SkillCaster casterCaster, BaseUnit targetSelf, SkillCastTarget targetCaster, SkillObject skillObject)
+    /// <summary>Deliver a native dungeon death skill's area signals without replaying its effects.</summary>
+    public void SignalAreaDoodads(Unit caster) =>
+        ApplyEffectsCore(caster, new SkillCasterUnit(caster.ObjId), caster,
+            new SkillCastUnitTarget(caster.ObjId), null, doodadSignalsOnly: true);
+
+    private void ApplyEffectsCore(BaseUnit caster, SkillCaster casterCaster, BaseUnit targetSelf, SkillCastTarget targetCaster, SkillObject skillObject,
+        bool doodadSignalsOnly = false)
     {
         if (caster is not Unit unit)
             return;
@@ -1736,13 +1745,14 @@ public class Skill
             originFallbackOnly = true;
         }
 
-        if (Template.TargetAreaCount > 0 && possibleTargets.Count > Template.TargetAreaCount)
-        {
-            possibleTargets = possibleTargets
-                .OrderBy(t => t.GetDistanceTo(targetSelf))
-                .Take(Template.TargetAreaCount)
-                .ToList();
-        }
+        var selection = InstanceStartAreaTargets.Select(possibleTargets, targetSelf,
+            Template.TargetAreaCount, (SignalLifecycleDoodads || doodadSignalsOnly) && areaRadius > 0);
+        possibleTargets = selection.EffectTargets;
+        foreach (var areaDoodad in selection.DoodadHits)
+            areaDoodad.OnSkillHit(caster, Id);
+
+        if (doodadSignalsOnly)
+            return;
 
         foreach (var target in possibleTargets)
         {
@@ -1811,7 +1821,7 @@ public class Skill
                     }
                 }
             }
-            else if (target is Doodad doodad)
+            else if (target is Doodad doodad && !selection.DoodadHits.Contains(doodad))
             {
                 doodad.OnSkillHit(caster, Id);
             }

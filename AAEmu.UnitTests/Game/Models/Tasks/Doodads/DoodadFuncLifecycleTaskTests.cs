@@ -8,6 +8,7 @@ using AAEmu.Game.Models.Game.DoodadObj;
 using AAEmu.Game.Models.Game.DoodadObj.Funcs;
 using AAEmu.Game.Models.Game.Housing;
 using AAEmu.Game.Models.Game.Items;
+using AAEmu.Game.Models.Game.World;
 using AAEmu.Game.Models.Tasks.Doodads;
 
 namespace AAEmu.UnitTests.Game.Models.Tasks.Doodads;
@@ -41,6 +42,45 @@ public sealed class DoodadFuncLifecycleTaskTests
     public void Teardown()
     {
         _singletonField.SetValue(null, _previousManager);
+    }
+
+    [Test]
+    public async Task CloutExpiry_DeletesItsOwnDoodad_AndPreservesTheRoomAnchor()
+    {
+        var owner = new RecordingDoodad();
+        var roomAnchor = new RecordingDoodad();
+        var trigger = new AreaTrigger { Owner = roomAnchor };
+        var clout = new DoodadFuncClout { NextPhase = -1 };
+        var completion = clout.CreateCompletionTask(owner, trigger);
+        owner.FuncTask = completion;
+
+        completion.Execute();
+        completion.Execute();
+
+        await Assert.That(owner.DeleteCount).IsEqualTo(1);
+        await Assert.That(roomAnchor.DeleteCount).IsEqualTo(0);
+        await Assert.That(owner.FuncTask).IsNull();
+    }
+
+    [Test]
+    public async Task CloutOldTask_CannotDeleteOwnerOrClearItsReplacementTask()
+    {
+        var owner = new RecordingDoodad();
+        var clout = new DoodadFuncClout { NextPhase = -1 };
+        var oldTask = clout.CreateCompletionTask(owner, new AreaTrigger { Owner = owner });
+        var replacement = new DoodadFuncTimerTask(null, owner, 0, 0);
+        owner.FuncTask = replacement;
+
+        oldTask.Execute();
+
+        await Assert.That(owner.DeleteCount).IsEqualTo(0);
+        await Assert.That(owner.FuncTask).IsSameReferenceAs(replacement);
+    }
+
+    private sealed class RecordingDoodad : Doodad
+    {
+        public int DeleteCount { get; private set; }
+        public override void Delete() => DeleteCount++;
     }
 
     [Test]

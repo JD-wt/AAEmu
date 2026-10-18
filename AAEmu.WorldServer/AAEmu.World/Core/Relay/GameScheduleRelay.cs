@@ -71,13 +71,14 @@ public static class GameScheduleRelay
             foreach (var id in ended)
                 Broadcast(new WZGameScheduleEndPacket(id), id, "end");
 
-            // Opening the period only clears the spawner to run; it is the activate sphere that
-            // walks placements and spawns them. Without this the NPCs of a schedule that opens
-            // mid-session wait for the next player to enter the zone.
+            // Opening a period clears its spawners to run. Re-arm only those placements, so
+            // unrelated completed dungeon encounters remain inactive.
             if (started.Count > 0)
             {
+                var openedTypes = started.SelectMany(id =>
+                    GameScheduleManager.Instance.GetSpawnerIdsForSchedule(id)).ToHashSet();
                 foreach (var zone in LoadedZones())
-                    ZoneProtocolHandler.ReactivateNpcSpawners(zone, $"{started.Count} schedule periods opened");
+                    ScheduleSpawnerRearm.Apply(zone, openedTypes);
             }
         }
     }

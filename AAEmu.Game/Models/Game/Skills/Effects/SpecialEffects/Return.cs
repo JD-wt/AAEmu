@@ -54,10 +54,16 @@ public class Return : SpecialEffectAction
                 return;
             }
 
+            var destinationWorldId = WorldManager.Instance.GetWorldTemplateByZoneKey(trp.ZoneId)?.Id ??
+                                     ReturnTeleportRules.LoadWorldId(trp.WorldId, WorldManager.DefaultWorldTemplateId);
+            var destinationInstanceId = ReturnTeleportRules.DestinationInstanceId(
+                character.ParentWorld.Template.Id, destinationWorldId,
+                character.Transform.InstanceId, WorldManager.DefaultInstanceId);
+
             ApplyReturn(
                 character,
-                ReturnTeleportRules.LoadWorldId(trp.WorldId, WorldManager.DefaultWorldTemplateId),
-                WorldManager.DefaultInstanceId,
+                destinationWorldId,
+                destinationInstanceId,
                 trp.ZoneId,
                 trp.X,
                 trp.Y,

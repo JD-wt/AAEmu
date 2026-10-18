@@ -1272,6 +1272,8 @@ public class CharacterQuests(Character owner)
 
     /// <summary>spheres.id currently inside via quest_area_sphere.g (Zone group-16 path).</summary>
     private readonly HashSet<uint> _insideQuestAreaSphereIds = [];
+    private readonly object _questAreaSphereLock = new();
+    private bool _reconcilingQuestAreaSpheres;
 
     /// <summary>
     /// Diff player position against loaded quest_area_sphere.g; fire enter/exit sphere acts
@@ -1280,6 +1282,25 @@ public class CharacterQuests(Character owner)
     /// without waiting for another ZWEnterArea edge.
     /// </summary>
     public void ReconcileQuestAreaSpheres()
+    {
+        lock (_questAreaSphereLock)
+        {
+            // Sphere skills may synchronously cause another area notification on this thread.
+            if (_reconcilingQuestAreaSpheres)
+                return;
+            _reconcilingQuestAreaSpheres = true;
+            try
+            {
+                ReconcileQuestAreaSpheresCore();
+            }
+            finally
+            {
+                _reconcilingQuestAreaSpheres = false;
+            }
+        }
+    }
+
+    private void ReconcileQuestAreaSpheresCore()
     {
         var world = Owner.ParentWorld;
         var sqm = world?.SphereQuestManager;
@@ -1569,7 +1590,10 @@ public class CharacterQuests(Character owner)
     /// </summary>
     public void SyncSphereBuffsToOwnedMounts()
     {
-        foreach (var sphereId in _insideQuestAreaSphereIds)
+        uint[] sphereIds;
+        lock (_questAreaSphereLock)
+            sphereIds = [.. _insideQuestAreaSphereIds];
+        foreach (var sphereId in sphereIds)
         {
             var db = SphereGameData.Instance.GetSphere(sphereId);
             if (db?.SphereDetailType != "SphereBuff")

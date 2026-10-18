@@ -1,4 +1,5 @@
 using AAEmu.Game.Models.Game.Skills.Templates;
+using AAEmu.Game.Models.Game.Skills.Effects;
 
 namespace AAEmu.Game.Models.Game.NPChar;
 
@@ -18,7 +19,7 @@ namespace AAEmu.Game.Models.Game.NPChar;
 public static class OnSpawnTargetEffectRules
 {
     /// <summary>One OnSpawn skill effect reduced to the columns that decide who it lands on.</summary>
-    public readonly record struct TargetEffect(uint TargetBuffTagId, uint TargetNpcTagId, bool CheckTargetTagSrc);
+    public readonly record struct TargetEffect(uint TargetBuffTagId, uint TargetNpcTagId, bool CheckTargetTagSrc, bool SpawnsNpc = false);
 
     /// <summary>
     /// The effects of an OnSpawn skill, in the shape <see cref="ShouldWorldRun"/> reads.
@@ -33,7 +34,8 @@ public static class OnSpawnTargetEffectRules
         {
             if (effect == null)
                 continue;
-            effects.Add(new TargetEffect(effect.TargetBuffTagId, effect.TargetNpcTagId, effect.CheckTargetTagSrc));
+            effects.Add(new TargetEffect(effect.TargetBuffTagId, effect.TargetNpcTagId, effect.CheckTargetTagSrc,
+                effect.Template is NpcSpawnerSpawnEffect));
         }
 
         return effects;
@@ -44,7 +46,8 @@ public static class OnSpawnTargetEffectRules
         bool isZoneMirror,
         bool isPriorityMirror,
         bool hasPlot,
-        IReadOnlyList<TargetEffect> effects)
+        IReadOnlyList<TargetEffect> effects,
+        bool isInstanceStartNpc = false)
     {
         if (!zoneAuthority || !isZoneMirror || !isPriorityMirror)
             return false;
@@ -58,6 +61,11 @@ public static class OnSpawnTargetEffectRules
 
         foreach (var effect in effects)
         {
+            // Plotless dungeon start skills also drive their portals through OnSkillHit.
+            // Run the whole skill, including its source despawn, only for the copy's start NPC.
+            if (isInstanceStartNpc && effect.SpawnsNpc)
+                return true;
+
             // Read off the caster: the effect is aimed at the caster, not at another unit.
             if (effect.CheckTargetTagSrc)
                 continue;

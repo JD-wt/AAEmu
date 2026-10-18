@@ -1233,6 +1233,7 @@ public partial class Npc : Unit
         MentoringChestRestorationService.PrepareForBossDeath(this);
 
         base.DoDie(killer, killReason);
+        SignalZoneMirrorDeathDoodads();
         ClearAllAggroTargetsAndCheckCombatState();
         // AggroTable.Clear();
         CharacterTagging.ClearAllTaggers();
@@ -1265,6 +1266,40 @@ public partial class Npc : Unit
                 delay += TimeSpan.FromSeconds(LootingContainer.LootDespawnExtensionTime);
             Despawn = DateTime.UtcNow.Add(delay);
             ParentWorld.SpawnManager.AddDespawn(this);
+        }
+    }
+
+    private int _deathDoodadSignalsDispatched;
+
+    private void SignalZoneMirrorDeathDoodads()
+    {
+        if (!WorldIntegration.ZoneAuthority || !IsZoneMirror || ParentWorld?.DungeonInstance == null)
+            return;
+        if (Interlocked.Exchange(ref _deathDoodadSignalsDispatched, 1) != 0)
+            return;
+
+        var skills = NpcGameData.Instance.GetNpSkills(TemplateId, SkillUseConditionKind.OnDeath);
+        if (skills == null)
+            return;
+        foreach (var npcSkill in skills.DistinctBy(s => s.SkillId))
+        {
+            var skill = SkillManager.Instance.GetNpSkillTemplate(npcSkill);
+            if (!NpcDeathDoodadSignalRules.ShouldSignal(true, true, true, skill?.Template))
+                continue;
+
+            // Native death already happened. Deliver its area signal independently of effects:
+            // a mixed death skill may summon a reward and also unlock a portal.
+            try
+            {
+                skill.SignalAreaDoodads(this);
+                Logger.Info("OnDeath doodad signal bc={0} tpl={1} skill={2} instance={3}",
+                    ObjId, TemplateId, skill.Id, ParentWorld.Id);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(ex, "OnDeath doodad signal failed bc={0} tpl={1} skill={2}",
+                    ObjId, TemplateId, skill.Id);
+            }
         }
     }
 
@@ -1799,7 +1834,8 @@ public partial class Npc : Unit
                     isZoneMirror: IsZoneMirror,
                     isPriorityMirror: IsMirrorStreamPriority,
                     hasPlot: skillTemplate.Plot != null,
-                    effects: OnSpawnTargetEffectRules.EffectsOf(skillTemplate)))
+                    effects: OnSpawnTargetEffectRules.EffectsOf(skillTemplate),
+                    isInstanceStartNpc: IsInstanceStartNpc()))
                 continue;
 
             foreach (var skillEffect in skillTemplate.Effects)
@@ -1998,10 +2034,19 @@ public partial class Npc : Unit
         }
     }
 
+    private readonly ConcurrentDictionary<uint, byte> _scheduledOnSpawnTargetSkills = new();
+
+    private bool IsInstanceStartNpc()
+    {
+        var towerId = ParentWorld?.DungeonInstance?._indunZone?.Option.TowerDefId ?? 0;
+        var tower = TowerDefGameData.Instance.GetTowerDef(towerId);
+        return tower != null && TowerDefGameData.Instance.IsPortalSeedNpc(tower.TargetNpcSpawnId, TemplateId);
+    }
+
     /// <summary>
-    /// ZoneAuthority: run an OnSpawn skill whose effects land on another unit (an event start
-    /// script — a plotless, <c>plot_only</c> skill whose area buff is filtered by the target's buff
-    /// tag) through the skill engine, so the effect reaches the skill's own targets.
+    /// ZoneAuthority: run plotless OnSpawn skills through the skill engine when they target
+    /// another unit by tag, or directly spawn NPCs from the dungeon copy's start NPC.
+    /// This preserves area targets, doodad skill hits and the source despawn.
     /// </summary>
     /// <remarks>
     /// The two visual paths cannot deliver this shape: <see cref="ApplyOnSpawnSkillBuffs"/> puts
@@ -2038,10 +2083,11 @@ public partial class Npc : Unit
                     isZoneMirror: true,
                     isPriorityMirror: true,
                     hasPlot: skill.Template.Plot != null,
-                    effects: OnSpawnTargetEffectRules.EffectsOf(skill.Template)))
+                    effects: OnSpawnTargetEffectRules.EffectsOf(skill.Template),
+                    isInstanceStartNpc: IsInstanceStartNpc()))
                 continue;
 
-            if (Cooldowns.CheckCooldown(skill.Id))
+            if (Cooldowns.CheckCooldown(skill.Id) || !_scheduledOnSpawnTargetSkills.TryAdd(skill.Id, 0))
                 continue;
             if (skill.Template.CooldownTime == 0)
                 Cooldowns.AddCooldown(skill.Id, uint.MaxValue);
@@ -2049,14 +2095,17 @@ public partial class Npc : Unit
             // skill_use_param1: delay seconds before the script runs.
             var delaySec = npcSkill.SkillUseParam1;
             skill.SuppressZoneSkillRelay = true;
+            skill.SignalLifecycleDoodads = IsInstanceStartNpc();
             var caster = SkillCaster.GetByType(SkillCasterType.Unit);
             caster.ObjId = ObjId;
             var target = SkillCastTarget.GetByType(SkillCastTargetType.Unit);
             target.ObjId = ObjId;
 
+            var spawnWorld = ParentWorld;
             void Fire()
             {
-                if (Hp <= 0 || !IsVisible)
+                if (spawnWorld == null || Hp <= 0 || !IsVisible || ParentWorld != spawnWorld
+                    || WorldManager.Instance.GetWorld(spawnWorld.Id) != spawnWorld)
                     return;
                 try
                 {
@@ -2111,6 +2160,7 @@ public partial class Npc : Unit
         // Kill-quota credit is once per life; respawn (or any reuse of this instance) starts a new life.
         ResetTowerDefKillQuotaNotification();
         ResetMentoringChestPreparation();
+        Interlocked.Exchange(ref _deathDoodadSignalsDispatched, 0);
         base.Spawn();
     }
 

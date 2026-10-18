@@ -5,6 +5,18 @@ namespace AAEmu.UnitTests.Game.Models.Game.Teleport;
 public class ReturnTeleportRulesTests
 {
     [Test]
+    public async Task RoomReturn_PreservesLiveCopy_WhileDungeonExitLoadsDefaultInstance()
+    {
+        var roomInstance = ReturnTeleportRules.DestinationInstanceId(46, 46, 100, 0);
+        await Assert.That(roomInstance).IsEqualTo(100u);
+        await Assert.That(ReturnTeleportRules.NeedsInstanceLoad(100, roomInstance)).IsFalse();
+        var exitInstance = ReturnTeleportRules.DestinationInstanceId(46, 0, 100, 0);
+        await Assert.That(exitInstance).IsEqualTo(0u);
+        await Assert.That(ReturnTeleportRules.NeedsInstanceLoad(100, exitInstance)).IsTrue();
+        await Assert.That(ReturnTeleportRules.DestinationInstanceId(0, 0, 7, 0)).IsEqualTo(7u);
+    }
+
+    [Test]
     public async Task SameInstance_DoesNotLoad()
     {
         await Assert.That(ReturnTeleportRules.NeedsInstanceLoad(0, 0)).IsFalse();

@@ -18,17 +18,22 @@ public class DoodadFuncCloutTask(BaseUnit caster, Doodad owner, uint skillId, in
 
     public override void Execute()
     {
-        if (_caster is Character)
-            Logger.Debug("[Doodad] DoodadFuncCloutTask: Doodad {0}, TemplateId {1}. Using skill {2} with doodad phase {3}", _owner.ObjId, _owner.TemplateId, _skillId, nextPhase);
-        else
-            Logger.Trace("[Doodad] DoodadFuncCloutTask: Doodad {0}, TemplateId {1}. Using skill {2} with doodad phase {3}", _owner.ObjId, _owner.TemplateId, _skillId, nextPhase);
-
-        _owner.FuncTask = null;
-
-        if (nextPhase == -1)
-            _owner.Delete();
-
+        // The trigger's spatial anchor may be a different doodad. Only this lifecycle's owner
+        // may be deleted or advanced, and a cancelled/dequeued task must not override a new phase.
         AreaTriggerManager.Instance.RemoveAreaTrigger(areaTrigger);
-        _owner.DoChangePhase(_caster, nextPhase);
+        ExecuteIfCurrent(() =>
+        {
+            if (_caster is Character)
+                Logger.Debug("[Doodad] DoodadFuncCloutTask: Doodad {0}, TemplateId {1}. Using skill {2} with doodad phase {3}", _owner.ObjId, _owner.TemplateId, _skillId, nextPhase);
+            else
+                Logger.Trace("[Doodad] DoodadFuncCloutTask: Doodad {0}, TemplateId {1}. Using skill {2} with doodad phase {3}", _owner.ObjId, _owner.TemplateId, _skillId, nextPhase);
+
+            _owner.FuncTask = null;
+
+            if (nextPhase == -1)
+                _owner.Delete();
+
+            _owner.DoChangePhase(_caster, nextPhase);
+        });
     }
 }

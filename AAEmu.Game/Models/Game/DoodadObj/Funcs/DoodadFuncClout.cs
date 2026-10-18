@@ -79,11 +79,14 @@ public class DoodadFuncClout : DoodadPhaseFuncTemplate
             }
 
             // Schedule the lifecycle completion task.
-            owner.FuncTask = new DoodadFuncCloutTask(areaTrigger.Caster, areaTrigger.Owner, 0, NextPhase, areaTrigger);
+            owner.FuncTask = CreateCompletionTask(owner, areaTrigger);
             TaskManager.Instance.Schedule(owner.FuncTask, TimeSpan.FromMilliseconds(Duration));
         }
         //owner.OverridePhase = NextPhase; // Since phases trigger all at once let the doodad know its okay to stop here if the roll succeeded
 
         return false;
     }
+
+    internal DoodadFuncCloutTask CreateCompletionTask(Doodad owner, AreaTrigger areaTrigger) =>
+        new(areaTrigger.Caster, owner, 0, NextPhase, areaTrigger);
 }

@@ -6,6 +6,10 @@ namespace AAEmu.Game.Models.Game.Teleport;
 /// </summary>
 public static class ReturnTeleportRules
 {
+    public static uint DestinationInstanceId(uint currentWorldTemplateId, uint destinationWorldTemplateId,
+        uint currentInstanceId, uint defaultInstanceId) =>
+        currentWorldTemplateId == destinationWorldTemplateId ? currentInstanceId : defaultInstanceId;
+
     public static bool NeedsInstanceLoad(uint currentInstanceId, uint destInstanceId) =>
         currentInstanceId != destInstanceId;
 

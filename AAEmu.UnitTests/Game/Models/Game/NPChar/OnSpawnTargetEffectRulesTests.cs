@@ -1,3 +1,6 @@
+using AAEmu.Game.Models.Game.Skills;
+using AAEmu.Game.Models.Game.Skills.Effects;
+using AAEmu.Game.Models.Game.Skills.Templates;
 using AAEmu.Game.Models.Game.NPChar;
 
 namespace AAEmu.UnitTests.Game.Models.Game.NPChar;
@@ -94,5 +97,55 @@ public class OnSpawnTargetEffectRulesTests
             isPriorityMirror: true,
             hasPlot: false,
             effects: StartScriptEffects())).IsFalse();
+    }
+    // 49021: two direct spawner effects and a source despawn, no plot or target tags.
+    [Test]
+    public async Task InstanceStart_DirectSpawnerWithoutTags_Runs()
+    {
+        await Assert.That(OnSpawnTargetEffectRules.ShouldWorldRun(true, true, true, false,
+            [new(0, 0, false, true), new(0, 0, false, true), new(0, 0, false)],
+            isInstanceStartNpc: true)).IsTrue();
+    }
+
+    [Test]
+    public async Task OtherEvent_DirectSpawnerWithoutTags_DoesNotRun()
+    {
+        await Assert.That(OnSpawnTargetEffectRules.ShouldWorldRun(true, true, true, false,
+            [new(0, 0, false, true)], isInstanceStartNpc: false)).IsFalse();
+    }
+
+    [Test]
+    public async Task InstanceStart_WithPlot_RemainsOwnedByPlotPath()
+    {
+        await Assert.That(OnSpawnTargetEffectRules.ShouldWorldRun(true, true, true, true,
+            [new(0, 0, false, true)], isInstanceStartNpc: true)).IsFalse();
+    }
+
+    [Test]
+    public async Task InstanceStart_WithoutSpawnerOrTargetTags_DoesNotRun()
+    {
+        await Assert.That(OnSpawnTargetEffectRules.ShouldWorldRun(true, true, true, false,
+            [new(0, 0, false)], isInstanceStartNpc: true)).IsFalse();
+    }
+
+    [Test]
+    public async Task InstanceStart_WithoutZoneAuthority_DoesNotRun()
+    {
+        await Assert.That(OnSpawnTargetEffectRules.ShouldWorldRun(false, true, true, false,
+            [new(0, 0, false, true)], isInstanceStartNpc: true)).IsFalse();
+    }
+    [Test]
+    public async Task DirectSpawner_IsRecognizedFromSkillTemplate()
+    {
+        var skill = new SkillTemplate
+        {
+            Effects = [new SkillEffect { Template = new NpcSpawnerSpawnEffect { SpawnerId = 236455 } },
+                new SkillEffect { Template = new SpecialEffect() }]
+        };
+        var effects = OnSpawnTargetEffectRules.EffectsOf(skill);
+        await Assert.That(OnSpawnTargetEffectRules.ShouldWorldRun(true, true, true, false,
+            effects, isInstanceStartNpc: true)).IsTrue();
+        await Assert.That(OnSpawnTargetEffectRules.ShouldWorldRun(true, true, true, false,
+            effects, isInstanceStartNpc: false)).IsFalse();
     }
 }

@@ -257,7 +257,7 @@ public class SphereQuestManager(WorldInstance parent) : ISphereQuestManager
             // ZWEnterArea alone misses "already standing in Ezi's Light" after login / teleport.
             foreach (var character in parent.GetAllCharacters())
             {
-                if (character?.Quests == null)
+                if (character?.Quests == null || !ReferenceEquals(character.ParentWorld, parent))
                     continue;
                 if (!(character.Region?.HasPlayerActivity() ?? false))
                     continue;

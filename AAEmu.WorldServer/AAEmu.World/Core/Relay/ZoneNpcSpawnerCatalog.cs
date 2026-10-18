@@ -49,18 +49,23 @@ public static partial class ZoneNpcSpawnerCatalog
         if (catalog.Count == 0)
             return catalog;
 
-        var result = new PersistentSpawnerEntry[catalog.Count];
-        for (var i = 0; i < catalog.Count; i++)
+        // This is a restore channel, not the initial activation list. In a fresh copy,
+        // activation_state=false means a script may arm the spawner later. Restoring it as
+        // saved state 0 instead applies the native clear/retire event before that script runs.
+        var result = new List<PersistentSpawnerEntry>();
+        foreach (var entry in catalog)
         {
-            var entry = catalog[i];
             var key = new PersistentSpawnerKey(instanceId, zoneId, entry.Id);
-            var state = InstanceStates.AddOrUpdate(
-                key,
-                new PersistentSpawnerState(entry.Type, entry.State),
-                (_, current) => current.Type == entry.Type
-                    ? current
-                    : new PersistentSpawnerState(entry.Type, entry.State));
-            result[i] = entry with { State = state.State };
+            if (InstanceStates.TryGetValue(key, out var state))
+            {
+                if (state.Type == entry.Type)
+                    result.Add(entry with { State = state.State });
+            }
+            else if (entry.State != 0)
+            {
+                // Preserve the existing bootstrap for initially active persistent spawners.
+                result.Add(entry);
+            }
         }
 
         return result;
@@ -216,8 +221,8 @@ public static partial class ZoneNpcSpawnerCatalog
                 continue;
             }
 
-            // persistent-spawn event 3; state==0 dispatches clear event 4. The desc activation
-            // state is only the initial value. GetPersistentSpawners overlays the live instance.
+            // Initially active spawners still bootstrap through event 3. Initially inactive
+            // spawners are not completed: only an observed saved state may send clear event 4.
             var state = template.ActivationState ? (byte)1 : (byte)0;
             result.Add(new PersistentSpawnerEntry(id, type, state));
         }
